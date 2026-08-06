@@ -1,0 +1,59 @@
+/* src/index.css */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', 'Comic Sans MS', 'Chalkboard SE', sans-serif;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+  transition: background 0.5s ease;
+}
+
+#root {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Animation de fond (étoiles) */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.star {
+  position: fixed;
+  width: 6px;
+  height: 6px;
+  background: white;
+  border-radius: 50%;
+  animation: twinkle 2s infinite alternate;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Loader enfantin */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+.loader {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+}
+.loader span {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: var(--primary);
+  border-radius: 50%;
+  animation: bounce 0.6s infinite alternate;
+}
+.loader span:nth-child(2) { animation-delay: 0.2s; }
+.loader span:nth-child(3) { animation-delay: 0.4s; }
