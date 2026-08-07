@@ -1,3 +1,4 @@
+// src/pages/AdminDashboard.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db, signOut } from "../firebase";
@@ -16,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { ADMIN_EMAIL } from "../constants";
 import { getAllUsers } from "../firebase";
+import toast from 'react-hot-toast';
 import "./AdminDashboard.css";
 
 export default function AdminDashboard() {
@@ -45,6 +47,19 @@ export default function AdminDashboard() {
   const [editingStoryId, setEditingStoryId] = useState(null);
   const [imageInput, setImageInput] = useState("");
   const [quizQuestion, setQuizQuestion] = useState({
+    questionFr: "",
+    questionAr: "",
+    optionsFr: ["", "", "", ""],
+    optionsAr: ["", "", "", ""],
+    correctAnswerIndex: 0,
+  });
+
+  // --- Quiz management modal ---
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [currentQuizStoryId, setCurrentQuizStoryId] = useState(null);
+  const [currentQuizQuestions, setCurrentQuizQuestions] = useState([]);
+  const [editingQuizQuestionIndex, setEditingQuizQuestionIndex] = useState(null);
+  const [tempQuizQuestion, setTempQuizQuestion] = useState({
     questionFr: "",
     questionAr: "",
     optionsFr: ["", "", "", ""],
@@ -143,7 +158,7 @@ export default function AdminDashboard() {
     loadAll();
   }, []);
 
-  // ----- Gestion des stories (avec quiz) -----
+  // ----- Gestion des histoires (formulaire principal) -----
   const addQuizQuestion = () => {
     if (
       !quizQuestion.questionFr ||
@@ -151,7 +166,7 @@ export default function AdminDashboard() {
       quizQuestion.optionsFr.some((o) => !o.trim()) ||
       quizQuestion.optionsAr.some((o) => !o.trim())
     ) {
-      alert("Veuillez remplir toutes les questions et options dans les deux langues.");
+      toast.error("Veuillez remplir toutes les questions et options dans les deux langues.");
       return;
     }
     setStoryForm((prev) => ({
@@ -177,7 +192,7 @@ export default function AdminDashboard() {
   const handleStorySubmit = async (e) => {
     e.preventDefault();
     if (!storyForm.titleFr && !storyForm.titleAr) {
-      alert("Titre requis au moins en français ou arabe.");
+      toast.error("Titre requis au moins en français ou arabe.");
       return;
     }
     const storyData = {
@@ -197,9 +212,11 @@ export default function AdminDashboard() {
     try {
       if (editingStoryId) {
         await updateDoc(doc(db, "stories", editingStoryId), storyData);
+        toast.success("Histoire mise à jour !");
         setEditingStoryId(null);
       } else {
         await addDoc(collection(db, "stories"), storyData);
+        toast.success("Histoire ajoutée !");
       }
       setStoryForm({
         titleFr: "",
@@ -221,7 +238,7 @@ export default function AdminDashboard() {
       fetchStories();
     } catch (err) {
       console.error(err);
-      alert("Erreur lors de l'enregistrement.");
+      toast.error("Erreur lors de l'enregistrement.");
     }
   };
 
@@ -245,6 +262,97 @@ export default function AdminDashboard() {
     });
   };
 
+  // ----- Gestion du quiz (modal dédié) -----
+  const openQuizManager = (story) => {
+    setCurrentQuizStoryId(story.id);
+    setCurrentQuizQuestions(story.quiz || []);
+    setEditingQuizQuestionIndex(null);
+    setTempQuizQuestion({
+      questionFr: "",
+      questionAr: "",
+      optionsFr: ["", "", "", ""],
+      optionsAr: ["", "", "", ""],
+      correctAnswerIndex: 0,
+    });
+    setShowQuizModal(true);
+  };
+
+  const handleEditQuizQuestion = (index) => {
+    const q = currentQuizQuestions[index];
+    setEditingQuizQuestionIndex(index);
+    setTempQuizQuestion({
+      questionFr: q.questionFr || "",
+      questionAr: q.questionAr || "",
+      optionsFr: q.optionsFr || ["", "", "", ""],
+      optionsAr: q.optionsAr || ["", "", "", ""],
+      correctAnswerIndex: q.correctAnswerIndex || 0,
+    });
+  };
+
+  const handleDeleteQuizQuestion = async (index) => {
+    if (!window.confirm("Supprimer cette question du quiz ?")) return;
+    const newQuestions = currentQuizQuestions.filter((_, i) => i !== index);
+    setCurrentQuizQuestions(newQuestions);
+    try {
+      await updateDoc(doc(db, "stories", currentQuizStoryId), {
+        quiz: newQuestions,
+      });
+      toast.success("Question supprimée !");
+      fetchStories();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de la suppression.");
+    }
+  };
+
+  const handleSaveQuizQuestion = async () => {
+    if (
+      !tempQuizQuestion.questionFr ||
+      !tempQuizQuestion.questionAr ||
+      tempQuizQuestion.optionsFr.some(o => !o.trim()) ||
+      tempQuizQuestion.optionsAr.some(o => !o.trim())
+    ) {
+      toast.error("Veuillez remplir tous les champs en français et en arabe.");
+      return;
+    }
+    const newQuestions = [...currentQuizQuestions];
+    if (editingQuizQuestionIndex !== null) {
+      newQuestions[editingQuizQuestionIndex] = { ...tempQuizQuestion };
+    } else {
+      newQuestions.push({ ...tempQuizQuestion });
+    }
+    setCurrentQuizQuestions(newQuestions);
+    try {
+      await updateDoc(doc(db, "stories", currentQuizStoryId), {
+        quiz: newQuestions,
+      });
+      toast.success(editingQuizQuestionIndex !== null ? "Question modifiée !" : "Question ajoutée !");
+      setEditingQuizQuestionIndex(null);
+      setTempQuizQuestion({
+        questionFr: "",
+        questionAr: "",
+        optionsFr: ["", "", "", ""],
+        optionsAr: ["", "", "", ""],
+        correctAnswerIndex: 0,
+      });
+      fetchStories();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de l'enregistrement.");
+    }
+  };
+
+  const cancelQuizEdit = () => {
+    setEditingQuizQuestionIndex(null);
+    setTempQuizQuestion({
+      questionFr: "",
+      questionAr: "",
+      optionsFr: ["", "", "", ""],
+      optionsAr: ["", "", "", ""],
+      correctAnswerIndex: 0,
+    });
+  };
+
   // ----- Gestion des packs -----
   const handlePackSubmit = async (e) => {
     e.preventDefault();
@@ -259,13 +367,16 @@ export default function AdminDashboard() {
       if (editingPackId) {
         await updateDoc(doc(db, "packs", editingPackId), data);
         setEditingPackId(null);
+        toast.success("Pack mis à jour !");
       } else {
         await addDoc(collection(db, "packs"), data);
+        toast.success("Pack ajouté !");
       }
       setPackForm({ name: "", price: "", storyCount: "", description: "" });
       fetchPacks();
     } catch (err) {
       console.error(err);
+      toast.error("Erreur lors de l'enregistrement.");
     }
   };
 
@@ -273,9 +384,11 @@ export default function AdminDashboard() {
     if (!window.confirm("Supprimer ce pack ?")) return;
     try {
       await deleteDoc(doc(db, "packs", id));
+      toast.success("Pack supprimé !");
       fetchPacks();
     } catch (err) {
       console.error(err);
+      toast.error("Erreur lors de la suppression.");
     }
   };
 
@@ -298,11 +411,12 @@ export default function AdminDashboard() {
         status: "approved",
         processedAt: serverTimestamp(),
       });
+      toast.success("Demande approuvée !");
       await fetchRequests();
       await fetchUsersAccess();
     } catch (err) {
       console.error("Erreur approbation:", err);
-      alert("Erreur lors de l'approbation. Vérifiez les permissions.");
+      toast.error("Erreur lors de l'approbation. Vérifiez les permissions.");
     }
   };
 
@@ -312,9 +426,11 @@ export default function AdminDashboard() {
         status: "rejected",
         processedAt: serverTimestamp(),
       });
+      toast.info("Demande rejetée.");
       await fetchRequests();
     } catch (err) {
       console.error("Erreur rejet:", err);
+      toast.error("Erreur lors du rejet.");
     }
   };
 
@@ -328,9 +444,11 @@ export default function AdminDashboard() {
         packId: null,
         purchasedAt: null,
       });
+      toast.success("Accès réinitialisé !");
       fetchUsersAccess();
     } catch (err) {
       console.error(err);
+      toast.error("Erreur lors de la réinitialisation.");
     }
   };
 
@@ -447,7 +565,7 @@ export default function AdminDashboard() {
             </section>
           )}
 
-          {/* ===== ONGLET HISTOIRES (AVEC ÂGE ET DURÉE) ===== */}
+          {/* ===== ONGLET HISTOIRES ===== */}
           {activeTab === "stories" && (
             <section className="story-management">
               <h2>📖 Gestion des histoires (quiz bilingue)</h2>
@@ -533,7 +651,7 @@ export default function AdminDashboard() {
                     <label>Catégorie</label>
                     <input
                       type="text"
-                      placeholder="Ex: Aventure, Science, Contes..."
+                      placeholder="Ex: Aventure"
                       value={storyForm.category}
                       onChange={(e) => setStoryForm({ ...storyForm, category: e.target.value })}
                     />
@@ -560,7 +678,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* ===== CHAMPS ÂGE ET DURÉE ===== */}
                 <div className="form-row">
                   <div className="form-group">
                     <label>Âge recommandé</label>
@@ -586,7 +703,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Images supplémentaires */}
                 <div className="form-group">
                   <label>Images supplémentaires</label>
                   <div className="image-gallery-input">
@@ -631,7 +747,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Quiz */}
+                {/* Quiz intégré au formulaire principal (avec sélection visuelle) */}
                 <div className="form-group quiz-section">
                   <label>Quiz (questions/réponses bilingues)</label>
                   <div className="quiz-builder">
@@ -675,21 +791,28 @@ export default function AdminDashboard() {
                         </div>
                       ))}
                     </div>
-                    <div>
-                      <label>Réponse correcte (index 0-3) : </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="3"
-                        value={quizQuestion.correctAnswerIndex}
-                        onChange={(e) =>
-                          setQuizQuestion({
-                            ...quizQuestion,
-                            correctAnswerIndex: parseInt(e.target.value) || 0,
-                          })
-                        }
-                      />
+
+                    {/* Sélection visuelle de la réponse correcte */}
+                    <div className="correct-answer-selector">
+                      <label>Réponse correcte :</label>
+                      <div className="options-radio-group">
+                        {[0, 1, 2, 3].map((i) => (
+                          <label key={i} className={`option-radio ${quizQuestion.correctAnswerIndex === i ? 'selected' : ''}`}>
+                            <input
+                              type="radio"
+                              name="correctAnswer"
+                              value={i}
+                              checked={quizQuestion.correctAnswerIndex === i}
+                              onChange={() => setQuizQuestion({ ...quizQuestion, correctAnswerIndex: i })}
+                            />
+                            <span className="option-label">
+                              {quizQuestion.optionsFr[i] || `Option ${i+1}`} / {quizQuestion.optionsAr[i] || `خيار ${i+1}`}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
+
                     <button type="button" onClick={addQuizQuestion}>
                       Ajouter une question
                     </button>
@@ -710,7 +833,7 @@ export default function AdminDashboard() {
 
                 <div className="form-actions">
                   <button type="submit" className="btn-save">
-                    {editingStoryId ? "Mettre à jour" : "Ajouter l'histoire"}
+                    {editingStoryId ? "Mettre à jour l'histoire" : "Ajouter l'histoire"}
                   </button>
                   {editingStoryId && (
                     <button
@@ -743,7 +866,7 @@ export default function AdminDashboard() {
                 </div>
               </form>
 
-              {/* Liste des histoires avec affichage Âge et Durée */}
+              {/* Liste des histoires avec bouton "Gérer le quiz" */}
               <div className="stories-list">
                 {stories.map((story) => (
                   <div key={story.id} className="story-item">
@@ -757,14 +880,17 @@ export default function AdminDashboard() {
                       <span className="badge age-badge">{story.age || "6-8"}</span>
                       <span className="badge duration-badge">{story.duration || "moyen"}</span>
                       <div className="story-actions">
-                        <button onClick={() => loadStoryForEdit(story)}>✏️</button>
+                        <button onClick={() => loadStoryForEdit(story)} title="Modifier l'histoire">✏️</button>
+                        <button onClick={() => openQuizManager(story)} title="Gérer le quiz" className="btn-quiz-manage">📝</button>
                         <button
                           onClick={async () => {
                             if (window.confirm("Supprimer cette histoire ?")) {
                               await deleteDoc(doc(db, "stories", story.id));
+                              toast.success("Histoire supprimée !");
                               fetchStories();
                             }
                           }}
+                          title="Supprimer"
                         >
                           🗑️
                         </button>
@@ -863,6 +989,106 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
+
+      {/* ===== MODAL DE GESTION DU QUIZ (indépendant) ===== */}
+      {showQuizModal && (
+        <div className="modal-overlay" onClick={() => setShowQuizModal(false)}>
+          <div className="modal-content quiz-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>📝 Gestion du quiz</h2>
+            {currentQuizQuestions.length > 0 && (
+              <div className="quiz-questions-list">
+                <h4>Questions existantes :</h4>
+                {currentQuizQuestions.map((q, idx) => (
+                  <div key={idx} className="quiz-question-item">
+                    <div className="quiz-question-header">
+                      <strong>Q{idx+1} :</strong> {q.questionFr} / {q.questionAr}
+                      <div className="quiz-question-actions">
+                        <button onClick={() => handleEditQuizQuestion(idx)}>✏️</button>
+                        <button onClick={() => handleDeleteQuizQuestion(idx)}>🗑️</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <hr />
+            <h4>{editingQuizQuestionIndex !== null ? "Modifier la question" : "Ajouter une question"}</h4>
+            <div className="quiz-builder-simple">
+              <input
+                type="text"
+                placeholder="Question (FR)"
+                value={tempQuizQuestion.questionFr}
+                onChange={(e) => setTempQuizQuestion({ ...tempQuizQuestion, questionFr: e.target.value })}
+              />
+              <input
+                type="text"
+                placeholder="Question (AR)"
+                value={tempQuizQuestion.questionAr}
+                onChange={(e) => setTempQuizQuestion({ ...tempQuizQuestion, questionAr: e.target.value })}
+                dir="rtl"
+              />
+              <div className="options-pair">
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} className="option-pair">
+                    <input
+                      type="text"
+                      placeholder={`Option ${i+1} (FR)`}
+                      value={tempQuizQuestion.optionsFr[i] || ""}
+                      onChange={(e) => {
+                        const opts = [...tempQuizQuestion.optionsFr];
+                        opts[i] = e.target.value;
+                        setTempQuizQuestion({ ...tempQuizQuestion, optionsFr: opts });
+                      }}
+                    />
+                    <input
+                      type="text"
+                      placeholder={`Option ${i+1} (AR)`}
+                      value={tempQuizQuestion.optionsAr[i] || ""}
+                      onChange={(e) => {
+                        const opts = [...tempQuizQuestion.optionsAr];
+                        opts[i] = e.target.value;
+                        setTempQuizQuestion({ ...tempQuizQuestion, optionsAr: opts });
+                      }}
+                      dir="rtl"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Sélection visuelle dans le modal */}
+              <div className="correct-answer-selector">
+                <label>Réponse correcte :</label>
+                <div className="options-radio-group">
+                  {[0, 1, 2, 3].map((i) => (
+                    <label key={i} className={`option-radio ${tempQuizQuestion.correctAnswerIndex === i ? 'selected' : ''}`}>
+                      <input
+                        type="radio"
+                        name="tempCorrectAnswer"
+                        value={i}
+                        checked={tempQuizQuestion.correctAnswerIndex === i}
+                        onChange={() => setTempQuizQuestion({ ...tempQuizQuestion, correctAnswerIndex: i })}
+                      />
+                      <span className="option-label">
+                        {tempQuizQuestion.optionsFr[i] || `Option ${i+1}`} / {tempQuizQuestion.optionsAr[i] || `خيار ${i+1}`}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="quiz-actions">
+                <button onClick={handleSaveQuizQuestion} className="btn-save">
+                  {editingQuizQuestionIndex !== null ? "Mettre à jour" : "Ajouter"}
+                </button>
+                {editingQuizQuestionIndex !== null && (
+                  <button onClick={cancelQuizEdit} className="btn-cancel">Annuler</button>
+                )}
+              </div>
+            </div>
+            <button className="btn-close-modal" onClick={() => setShowQuizModal(false)}>✕</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

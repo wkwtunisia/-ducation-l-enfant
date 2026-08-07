@@ -72,6 +72,8 @@ export default function Education() {
   const [currentQuiz, setCurrentQuiz] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState([]);
   const [quizResult, setQuizResult] = useState(null);
+  const [quizFeedback, setQuizFeedback] = useState([]); // pour feedback par question
+  const [quizAttempted, setQuizAttempted] = useState(false);
 
   const isAdmin = user?.email === ADMIN_EMAIL;
   const t = (fr, ar) => (language === "fr" ? fr : ar);
@@ -95,11 +97,14 @@ export default function Education() {
 
         const favs = await getFavorites();
         setFavorites(favs);
+
         const userBadges = await getUserBadges();
         setBadges(userBadges);
+
         const count = await getReadCount();
         setReadCount(count);
 
+        // Charger les notes
         const ratingPromises = data.map(async (story) => {
           const avg = await getStoryRating(story.id);
           const userR = await getUserRatingForStory(story.id);
@@ -116,12 +121,12 @@ export default function Education() {
         setUserRatings(userRatingsMap);
       } catch (err) {
         console.error("Erreur chargement:", err);
-        toast.error(t("Erreur de chargement des histoires", "خطأ في تحميل القصص"));
+        toast.error(t("Erreur de chargement des données.", "خطأ في تحميل البيانات."));
       }
       setLoading(false);
     };
     fetchData();
-  }, []);
+  }, [language]);
 
   // Calcul des histoires accessibles
   const freeStories = stories.filter((s) => !s.isPremium);
@@ -146,31 +151,23 @@ export default function Education() {
     }
   }, [unlockedCount]);
 
-  // Filtrage + recherche
+  // Filtrage et pagination
   const filteredStories = stories.filter((story) => {
     const title = getLocalizedValue(story.title, language).toLowerCase();
     const description = getLocalizedValue(story.description, language).toLowerCase();
     const cat = story.category?.toLowerCase() || "";
     const term = searchTerm.toLowerCase();
     const matchSearch = title.includes(term) || description.includes(term) || cat.includes(term);
-    if (!matchSearch) return false;
-    if (filters.category !== "all" && story.category !== filters.category) return false;
-    if (filters.age !== "all" && story.age !== filters.age) return false;
-    if (filters.duration !== "all" && story.duration !== filters.duration) return false;
-    return true;
+    const matchCategory = filters.category === "all" || story.category === filters.category;
+    const matchAge = filters.age === "all" || story.age === filters.age;
+    const matchDuration = filters.duration === "all" || story.duration === filters.duration;
+    return matchSearch && matchCategory && matchAge && matchDuration;
   });
 
+  const totalPages = Math.ceil(filteredStories.length / storiesPerPage);
   const indexOfLastStory = currentPage * storiesPerPage;
   const indexOfFirstStory = indexOfLastStory - storiesPerPage;
   const currentStories = filteredStories.slice(indexOfFirstStory, indexOfLastStory);
-  const totalPages = Math.ceil(filteredStories.length / storiesPerPage);
-
-  const nextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
-  const prevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
 
   // Gestion des notes
   const handleRate = async (storyId, rating) => {
@@ -181,7 +178,7 @@ export default function Education() {
       setUserRatings((prev) => ({ ...prev, [storyId]: rating }));
       toast.success(t("⭐ Note enregistrée !", "⭐ تم تسجيل التقييم!"));
     } catch (err) {
-      toast.error(t("Erreur lors de l'enregistrement", "خطأ في التسجيل"));
+      toast.error(t("Erreur lors de la notation.", "خطأ في التقييم."));
     }
   };
 
@@ -191,55 +188,51 @@ export default function Education() {
       await toggleFavorite(storyId);
       const favs = await getFavorites();
       setFavorites(favs);
-      toast.success(favs.includes(storyId) ? t("❤️ Ajouté aux favoris !", "❤️ تمت الإضافة إلى المفضلة!") : t("💔 Retiré des favoris", "💔 تمت الإزالة من المفضلة"));
+      toast.success(favs.includes(storyId) ? t("❤️ Ajouté aux favoris !", "❤️ تمت الإضافة إلى المفضلة!") : t("💔 Retiré des favoris.", "💔 تمت الإزالة من المفضلة."));
     } catch (err) {
-      toast.error(t("Erreur", "خطأ"));
+      toast.error(t("Erreur.", "خطأ."));
     }
   };
 
-  // Lecture audio
-  // src/pages/Education.jsx (extrait modifié)
-
-// Ajoutez cette fonction utilitaire (en dehors du composant)
-// Avec gestion des voix et fallback
-const handleSpeak = (content, lang = "fr-FR") => {
-  if (!window.speechSynthesis) {
-    toast.error(t("Votre navigateur ne supporte pas la synthèse vocale.", "متصفحك لا يدعم تحويل النص إلى كلام."));
-    return;
-  }
-  if (speaking === content) {
-    window.speechSynthesis.cancel();
-    setSpeaking(null);
-    return;
-  }
-
-  const utterance = new SpeechSynthesisUtterance(content);
-  // Forcer la langue arabe si 'ar' est détecté
-  utterance.lang = lang.startsWith('ar') ? 'ar' : lang;
-  utterance.rate = 0.9;
-  utterance.pitch = 1.1;
-
-  // Chercher une voix appropriée
-  const voices = window.speechSynthesis.getVoices();
-  let voice = voices.find(v => v.lang.startsWith(utterance.lang));
-  if (!voice && lang.startsWith('ar')) {
-    voice = voices.find(v => v.lang.startsWith('ar'));
-  }
-  if (voice) {
-    utterance.voice = voice;
-  }
-
-  utterance.onend = () => setSpeaking(null);
-  utterance.onerror = (e) => {
-    console.error("Erreur de synthèse vocale :", e);
-    toast.error(t("Erreur lors de la lecture audio.", "خطأ في تشغيل الصوت."));
-    setSpeaking(null);
+  // Lecture audio (corrigée pour l'arabe)
+  const getVoiceForLanguage = (lang) => {
+    if (!window.speechSynthesis) return null;
+    const voices = window.speechSynthesis.getVoices();
+    let voice = voices.find(v => v.lang.startsWith(lang));
+    if (!voice && lang.startsWith('ar')) {
+      voice = voices.find(v => v.lang.startsWith('ar'));
+    }
+    if (!voice) voice = voices[0];
+    return voice;
   };
-  window.speechSynthesis.speak(utterance);
-  setSpeaking(content);
-};
 
-  // Marquer comme lue
+  const handleSpeak = (content, lang = "fr-FR") => {
+    if (!window.speechSynthesis) {
+      toast.error(t("Votre navigateur ne supporte pas la synthèse vocale.", "متصفحك لا يدعم تحويل النص إلى كلام."));
+      return;
+    }
+    if (speaking === content) {
+      window.speechSynthesis.cancel();
+      setSpeaking(null);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(content);
+    utterance.lang = lang.startsWith('ar') ? 'ar' : lang;
+    utterance.rate = 0.9;
+    utterance.pitch = 1.1;
+    const voice = getVoiceForLanguage(utterance.lang);
+    if (voice) utterance.voice = voice;
+    utterance.onend = () => setSpeaking(null);
+    utterance.onerror = (e) => {
+      console.error("Erreur vocale :", e);
+      toast.error(t("Erreur de lecture audio.", "خطأ في تشغيل الصوت."));
+      setSpeaking(null);
+    };
+    window.speechSynthesis.speak(utterance);
+    setSpeaking(content);
+  };
+
+  // Marquer comme lu
   const handleReadStory = async (storyId) => {
     try {
       await incrementReadCount(storyId);
@@ -252,11 +245,11 @@ const handleSpeak = (content, lang = "fr-FR") => {
       setBadges(userBadges);
       toast.success(t("📖 Histoire marquée comme lue !", "📖 تم وضع علامة مقروءة!"));
     } catch (err) {
-      toast.error(t("Erreur", "خطأ"));
+      toast.error(t("Erreur.", "خطأ."));
     }
   };
 
-  // Gestion packs
+  // Gestion des packs
   const handlePackSelection = (pack) => {
     setSelectedPack(pack);
     setPackForm({ name: "", phone: "" });
@@ -279,8 +272,8 @@ const handleSpeak = (content, lang = "fr-FR") => {
         status: "pending",
         createdAt: serverTimestamp(),
       });
-      setPackRequestStatus("success");
       toast.success(t("✅ Demande envoyée ! L'admin validera sous peu.", "✅ تم إرسال الطلب! سيقوم المسؤول بالتحقق قريباً."));
+      setPackRequestStatus("success");
       setTimeout(() => {
         setShowPackModal(false);
         setSelectedPack(null);
@@ -288,15 +281,15 @@ const handleSpeak = (content, lang = "fr-FR") => {
       }, 2000);
     } catch (err) {
       console.error(err);
-      setPackRequestStatus("error");
       toast.error(t("❌ Erreur lors de l'envoi.", "❌ خطأ في الإرسال."));
+      setPackRequestStatus("error");
     }
   };
 
-  // Quiz
+  // Quiz amélioré
   const openQuiz = (story) => {
     if (!story.quiz || story.quiz.length === 0) {
-      toast.error(t("Pas de quiz pour cette histoire.", "لا يوجد اختبار لهذه القصة."));
+      toast(t("Pas de quiz pour cette histoire.", "لا يوجد اختبار لهذه القصة."));
       return;
     }
     const questions = story.quiz.map((q) => ({
@@ -306,7 +299,9 @@ const handleSpeak = (content, lang = "fr-FR") => {
     }));
     setCurrentQuiz({ storyId: story.id, questions });
     setQuizAnswers(new Array(questions.length).fill(null));
+    setQuizFeedback(new Array(questions.length).fill(null));
     setQuizResult(null);
+    setQuizAttempted(false);
     setShowQuizModal(true);
   };
 
@@ -314,27 +309,46 @@ const handleSpeak = (content, lang = "fr-FR") => {
     const newAnswers = [...quizAnswers];
     newAnswers[qIndex] = optionIndex;
     setQuizAnswers(newAnswers);
+    // Feedback individuel
+    const feedback = quizFeedback.map((f, i) => {
+      if (i === qIndex) {
+        const correct = optionIndex === currentQuiz.questions[i].correctAnswerIndex;
+        return { answered: true, correct };
+      }
+      return f;
+    });
+    setQuizFeedback(feedback);
   };
 
   const submitQuiz = async () => {
-    const correctCount = currentQuiz.questions.reduce((acc, q, idx) => {
-      return acc + (quizAnswers[idx] === q.correctAnswerIndex ? 1 : 0);
-    }, 0);
-    const total = currentQuiz.questions.length;
-    const percentage = Math.round((correctCount / total) * 100);
-    setQuizResult({
-      correct: correctCount,
-      total: total,
-      percentage,
+    const questions = currentQuiz.questions;
+    let correctCount = 0;
+    const feedback = questions.map((q, idx) => {
+      const userAnswer = quizAnswers[idx];
+      const isCorrect = userAnswer === q.correctAnswerIndex;
+      if (isCorrect) correctCount++;
+      return { answered: userAnswer !== null, correct: isCorrect, userAnswer, correctAnswer: q.correctAnswerIndex };
     });
+    setQuizFeedback(feedback);
+    setQuizAttempted(true);
+    const total = questions.length;
+    const percentage = Math.round((correctCount / total) * 100);
+    setQuizResult({ correct: correctCount, total, percentage });
     if (percentage === 100) {
       await awardBadge("quiz-master");
       const userBadges = await getUserBadges();
       setBadges(userBadges);
-      toast.success(t("🏆 Quiz parfait ! Nouveau badge débloqué !", "🏆 اختبار مثالي! تم فتح شارة جديدة!"));
+      toast.success("🏆 Quiz parfait ! Vous avez gagné le badge Maître des quiz !");
     } else {
-      toast.success(t(`✅ Quiz terminé : ${correctCount}/${total}`, `✅ انتهى الاختبار: ${correctCount}/${total}`));
+      toast.info(t(`Vous avez ${correctCount}/${total} bonnes réponses.`, `لديك ${correctCount}/${total} إجابة صحيحة.`));
     }
+  };
+
+  const resetQuiz = () => {
+    setQuizAnswers(new Array(currentQuiz.questions.length).fill(null));
+    setQuizFeedback(new Array(currentQuiz.questions.length).fill(null));
+    setQuizResult(null);
+    setQuizAttempted(false);
   };
 
   const handleLogout = async () => {
@@ -361,11 +375,11 @@ const handleSpeak = (content, lang = "fr-FR") => {
           </button>
         </div>
         <div className="header-right">
-          <button className="btn-darkmode" onClick={() => setDarkMode(!darkMode)}>
-            {darkMode ? "☀️" : "🌙"}
-          </button>
           <button className="btn-lang" onClick={() => setLanguage(language === "fr" ? "ar" : "fr")}>
             {language === "fr" ? "🇸🇦 العربية" : "🇫🇷 Français"}
+          </button>
+          <button className="btn-darkmode" onClick={() => setDarkMode(!darkMode)}>
+            {darkMode ? "☀️" : "🌙"}
           </button>
           <button className="btn-theme" onClick={() => setShowThemeModal(true)}>🎨</button>
           {isAdmin && (
@@ -395,15 +409,15 @@ const handleSpeak = (content, lang = "fr-FR") => {
       <section className="stories-section">
         <div className="stories-header">
           <h2>{t("📖 Histoires éducatives", "📖 قصص تعليمية")}</h2>
-          <div className="search-bar">
-            <input
-              type="text"
-              placeholder={t("Rechercher une histoire...", "ابحث عن قصة...")}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
           <div className="filters">
+            <div className="search-bar">
+              <input
+                type="text"
+                placeholder={t("Rechercher une histoire...", "ابحث عن قصة...")}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
             <div className="filter-group">
               <label>{t("Catégorie", "الفئة")}</label>
               <select
@@ -474,6 +488,7 @@ const handleSpeak = (content, lang = "fr-FR") => {
                       </h3>
                       {description && <p>{description}</p>}
 
+                      {/* Barre d'actions : étoiles, favori, audio */}
                       <div className="story-actions-bar">
                         <div className="rating-stars">
                           {[1, 2, 3, 4, 5].map((r) => (
@@ -542,11 +557,11 @@ const handleSpeak = (content, lang = "fr-FR") => {
             {/* Pagination */}
             {totalPages > 1 && (
               <div className="pagination">
-                <button onClick={prevPage} disabled={currentPage === 1}>
+                <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1}>
                   ← {t("Précédent", "السابق")}
                 </button>
                 <span>{currentPage} / {totalPages}</span>
-                <button onClick={nextPage} disabled={currentPage === totalPages}>
+                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages}>
                   {t("Suivant", "التالي")} →
                 </button>
               </div>
@@ -555,33 +570,7 @@ const handleSpeak = (content, lang = "fr-FR") => {
         )}
       </section>
 
-      {/* Modals (thème, badges, packs, quiz) */}
-      {/* Modal thème */}
-      {showThemeModal && (
-        <div className="modal-overlay" onClick={() => setShowThemeModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>{t("Choisissez votre thème", "اختر ثيمك")}</h2>
-            <div className="theme-grid">
-              {Object.keys(themes).map((key) => (
-                <div
-                  key={key}
-                  className={`theme-option ${theme === key ? "active" : ""}`}
-                  style={{ backgroundColor: themes[key].primary }}
-                  onClick={() => {
-                    setTheme(key);
-                    setShowThemeModal(false);
-                  }}
-                >
-                  <span>{key}</span>
-                </div>
-              ))}
-            </div>
-            <button className="btn-close-modal" onClick={() => setShowThemeModal(false)}>✕</button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal badges */}
+      {/* Modal Badges */}
       {showBadgesModal && (
         <div className="modal-overlay" onClick={() => setShowBadgesModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -615,7 +604,32 @@ const handleSpeak = (content, lang = "fr-FR") => {
         </div>
       )}
 
-      {/* Modal packs */}
+      {/* Modal Thème */}
+      {showThemeModal && (
+        <div className="modal-overlay" onClick={() => setShowThemeModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>{t("Choisissez votre thème", "اختر ثيمك")}</h2>
+            <div className="theme-grid">
+              {Object.keys(themes).map((key) => (
+                <div
+                  key={key}
+                  className={`theme-option ${theme === key ? "active" : ""}`}
+                  style={{ backgroundColor: themes[key].primary }}
+                  onClick={() => {
+                    setTheme(key);
+                    setShowThemeModal(false);
+                  }}
+                >
+                  <span>{key}</span>
+                </div>
+              ))}
+            </div>
+            <button className="btn-close-modal" onClick={() => setShowThemeModal(false)}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Packs */}
       {showPackModal && (
         <div className="modal-overlay" onClick={() => {
           if (!selectedPack) setShowPackModal(false);
@@ -682,6 +696,12 @@ const handleSpeak = (content, lang = "fr-FR") => {
                     </button>
                   </div>
                 </form>
+                {packRequestStatus === "success" && (
+                  <p className="success-msg">✅ {t("Demande envoyée ! L'admin validera sous peu.", "تم إرسال الطلب! سيقوم المسؤول بالتحقق قريباً.")}</p>
+                )}
+                {packRequestStatus === "error" && (
+                  <p className="error-msg">❌ {t("Erreur lors de l'envoi.", "خطأ في الإرسال.")}</p>
+                )}
               </div>
             )}
             <button className="btn-close-modal" onClick={() => {
@@ -693,7 +713,7 @@ const handleSpeak = (content, lang = "fr-FR") => {
         </div>
       )}
 
-      {/* Modal quiz */}
+      {/* Modal Quiz amélioré */}
       {showQuizModal && currentQuiz && (
         <div className="modal-overlay" onClick={() => setShowQuizModal(false)}>
           <div className="modal-content quiz-modal" onClick={(e) => e.stopPropagation()}>
@@ -702,6 +722,18 @@ const handleSpeak = (content, lang = "fr-FR") => {
               <div className="quiz-result">
                 <p>{t("Votre score :", "نتيجتك:")} {quizResult.correct}/{quizResult.total}</p>
                 <p>{quizResult.percentage}%</p>
+                {quizResult.percentage === 100 && <p>🏆 {t("Parfait !", "ممتاز!")}</p>}
+                <div className="quiz-feedback">
+                  {quizFeedback.map((fb, idx) => (
+                    <div key={idx} className={`feedback-item ${fb.correct ? "correct" : "incorrect"}`}>
+                      <strong>{idx+1}.</strong> {fb.correct ? "✅" : "❌"}
+                      {!fb.correct && <span> {t("Bonne réponse :", "الإجابة الصحيحة:")} {currentQuiz.questions[idx].options[fb.correctAnswer]}</span>}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={resetQuiz} className="btn-retry-quiz">
+                  🔄 {t("Recommencer", "إعادة المحاولة")}
+                </button>
                 <button onClick={() => setShowQuizModal(false)} className="btn-close-quiz">
                   {t("Fermer", "إغلاق")}
                 </button>
@@ -712,22 +744,33 @@ const handleSpeak = (content, lang = "fr-FR") => {
                   <div key={qIdx} className="quiz-question">
                     <p><strong>{qIdx + 1}. {q.question}</strong></p>
                     <div className="quiz-options">
-                      {q.options.map((opt, oIdx) => (
-                        <label key={oIdx}>
-                          <input
-                            type="radio"
-                            name={`q${qIdx}`}
-                            value={oIdx}
-                            checked={quizAnswers[qIdx] === oIdx}
-                            onChange={() => handleAnswerChange(qIdx, oIdx)}
-                          />
-                          {opt}
-                        </label>
-                      ))}
+                      {q.options.map((opt, oIdx) => {
+                        const answered = quizFeedback[qIdx]?.answered;
+                        const isCorrect = quizFeedback[qIdx]?.correct;
+                        const isSelected = quizAnswers[qIdx] === oIdx;
+                        let className = "quiz-option";
+                        if (answered) {
+                          if (oIdx === q.correctAnswerIndex) className += " correct";
+                          else if (isSelected && !isCorrect) className += " incorrect";
+                        }
+                        return (
+                          <label key={oIdx} className={className}>
+                            <input
+                              type="radio"
+                              name={`q${qIdx}`}
+                              value={oIdx}
+                              checked={isSelected}
+                              onChange={() => handleAnswerChange(qIdx, oIdx)}
+                              disabled={quizFeedback[qIdx]?.answered}
+                            />
+                            {opt}
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
-                <button onClick={submitQuiz} className="btn-submit-quiz">
+                <button onClick={submitQuiz} className="btn-submit-quiz" disabled={quizAnswers.some(a => a === null)}>
                   {t("Soumettre", "إرسال")}
                 </button>
               </>
