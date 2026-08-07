@@ -4,15 +4,16 @@ import { createContext, useState, useContext, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db, createUserDocument } from "./firebase";
+import { Toaster } from 'react-hot-toast';
+import LandingPage from "./pages/LandingPage";
 import Login from "./pages/Login";
 import Education from "./pages/Education";
 import AdminDashboard from "./pages/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
-import { Toaster } from "react-hot-toast";
 import "./App.css";
 
-// Contextes
+// ===== CONTEXTES =====
 export const LanguageContext = createContext();
 export const useLanguage = () => useContext(LanguageContext);
 
@@ -22,6 +23,7 @@ export const useUserAccess = () => useContext(UserAccessContext);
 export const ThemeContext = createContext();
 export const useTheme = () => useContext(ThemeContext);
 
+// ===== THÈMES =====
 const themes = {
   blue: { primary: "#4f46e5", secondary: "#818cf8", accent: "#e0e7ff", bg: "#f5f7fa" },
   pink: { primary: "#ec4899", secondary: "#f472b6", accent: "#fce7f3", bg: "#fdf2f8" },
@@ -30,6 +32,7 @@ const themes = {
   purple: { primary: "#8b5cf6", secondary: "#a78bfa", accent: "#ede9fe", bg: "#f5f3ff" },
 };
 
+// ===== COMPOSANT PRINCIPAL =====
 function App() {
   const [language, setLanguage] = useState("fr");
   const [theme, setTheme] = useState("blue");
@@ -40,54 +43,25 @@ function App() {
   // Appliquer le thème et le mode sombre
   useEffect(() => {
     const colors = themes[theme];
+    const root = document.documentElement;
+    root.style.setProperty("--primary", colors.primary);
+    root.style.setProperty("--secondary", colors.secondary);
+    root.style.setProperty("--accent", colors.accent);
+    root.style.setProperty("--bg", darkMode ? "#1a1a2e" : colors.bg);
     if (darkMode) {
-      document.documentElement.style.setProperty("--primary", colors.primary);
-      document.documentElement.style.setProperty("--secondary", colors.secondary);
-      document.documentElement.style.setProperty("--accent", colors.accent);
-      document.documentElement.style.setProperty("--bg", "#1a1a2e");
-      document.documentElement.style.setProperty("--text", "#f0f0f0");
-      document.documentElement.style.setProperty("--card-bg", "#2d2d44");
-      document.documentElement.style.setProperty("--border", "#444");
+      root.classList.add("dark-mode");
     } else {
-      document.documentElement.style.setProperty("--primary", colors.primary);
-      document.documentElement.style.setProperty("--secondary", colors.secondary);
-      document.documentElement.style.setProperty("--accent", colors.accent);
-      document.documentElement.style.setProperty("--bg", colors.bg);
-      document.documentElement.style.setProperty("--text", "#1a1a2e");
-      document.documentElement.style.setProperty("--card-bg", "#ffffff");
-      document.documentElement.style.setProperty("--border", "#e2e8f0");
+      root.classList.remove("dark-mode");
     }
   }, [theme, darkMode]);
 
-  // Étoiles de fond (uniquement en mode clair, ou adapté)
-  useEffect(() => {
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.top = '0';
-    container.style.left = '0';
-    container.style.width = '100%';
-    container.style.height = '100%';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '-1';
-    for (let i = 0; i < 30; i++) {
-      const star = document.createElement('div');
-      star.className = 'star';
-      star.style.left = Math.random() * 100 + '%';
-      star.style.top = Math.random() * 100 + '%';
-      star.style.width = (Math.random() * 6 + 2) + 'px';
-      star.style.height = star.style.width;
-      star.style.animationDelay = (Math.random() * 3) + 's';
-      container.appendChild(star);
-    }
-    document.body.appendChild(container);
-    return () => document.body.removeChild(container);
-  }, []);
-
-  // Chargement de l'utilisateur
+  // Charger l'utilisateur et son accès
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        // Créer/mettre à jour le document utilisateur
         await createUserDocument(user);
+        // Récupérer l'accès
         const userDocRef = doc(db, "userAccess", user.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
@@ -123,10 +97,11 @@ function App() {
       <LanguageContext.Provider value={{ language, setLanguage }}>
         <UserAccessContext.Provider value={{ userAccess, setUserAccess }}>
           <BrowserRouter>
-            <div className="app-container" style={{ backgroundColor: 'var(--bg)', color: 'var(--text)' }}>
+            <div className="app-container" style={{ backgroundColor: 'var(--bg)' }}>
               <Toaster position="top-right" />
               <Routes>
-                <Route path="/" element={<Login />} />
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/login" element={<Login />} />
                 <Route
                   path="/education"
                   element={
