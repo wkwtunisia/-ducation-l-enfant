@@ -67,6 +67,21 @@ export default function AdminDashboard() {
     correctAnswerIndex: 0,
   });
 
+  // --- Videos ---
+  const [videos, setVideos] = useState([]);
+  const [videoForm, setVideoForm] = useState({
+    titleFr: "",
+    titleAr: "",
+    descriptionFr: "",
+    descriptionAr: "",
+    youtubeUrl: "",
+    category: "",
+    age: "6-8",
+    order: 0,
+    isPremium: false,
+  });
+  const [editingVideoId, setEditingVideoId] = useState(null);
+
   // --- Packs ---
   const [packs, setPacks] = useState([]);
   const [packForm, setPackForm] = useState({
@@ -98,6 +113,17 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error("Erreur stories:", err);
       setStories([]);
+    }
+  };
+
+  const fetchVideos = async () => {
+    try {
+      const q = query(collection(db, "videos"), orderBy("order", "asc"));
+      const snapshot = await getDocs(q);
+      setVideos(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    } catch (err) {
+      console.error("Erreur videos:", err);
+      setVideos([]);
     }
   };
 
@@ -146,6 +172,7 @@ export default function AdminDashboard() {
     setLoading(true);
     await Promise.allSettled([
       fetchStories(),
+      fetchVideos(),
       fetchPacks(),
       fetchRequests(),
       fetchUsers(),
@@ -353,6 +380,65 @@ export default function AdminDashboard() {
     });
   };
 
+  // ----- Gestion des vidéos -----
+  const handleVideoSubmit = async (e) => {
+    e.preventDefault();
+    if (!videoForm.titleFr && !videoForm.titleAr) {
+      toast.error("Titre requis au moins en français ou arabe.");
+      return;
+    }
+    const videoData = {
+      title: { fr: videoForm.titleFr, ar: videoForm.titleAr },
+      description: { fr: videoForm.descriptionFr, ar: videoForm.descriptionAr },
+      youtubeUrl: videoForm.youtubeUrl || "",
+      category: videoForm.category || "Général",
+      age: videoForm.age || "6-8",
+      order: Number(videoForm.order) || 0,
+      isPremium: videoForm.isPremium || false,
+      createdAt: serverTimestamp(),
+    };
+    try {
+      if (editingVideoId) {
+        await updateDoc(doc(db, "videos", editingVideoId), videoData);
+        toast.success("Vidéo mise à jour !");
+        setEditingVideoId(null);
+      } else {
+        await addDoc(collection(db, "videos"), videoData);
+        toast.success("Vidéo ajoutée !");
+      }
+      setVideoForm({
+        titleFr: "",
+        titleAr: "",
+        descriptionFr: "",
+        descriptionAr: "",
+        youtubeUrl: "",
+        category: "",
+        age: "6-8",
+        order: 0,
+        isPremium: false,
+      });
+      fetchVideos();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de l'enregistrement.");
+    }
+  };
+
+  const loadVideoForEdit = (video) => {
+    setEditingVideoId(video.id);
+    setVideoForm({
+      titleFr: video.title?.fr || "",
+      titleAr: video.title?.ar || "",
+      descriptionFr: video.description?.fr || "",
+      descriptionAr: video.description?.ar || "",
+      youtubeUrl: video.youtubeUrl || "",
+      category: video.category || "",
+      age: video.age || "6-8",
+      order: video.order || 0,
+      isPremium: video.isPremium || false,
+    });
+  };
+
   // ----- Gestion des packs -----
   const handlePackSubmit = async (e) => {
     e.preventDefault();
@@ -490,6 +576,12 @@ export default function AdminDashboard() {
               📖 Histoires ({stories.length})
             </li>
             <li
+              className={activeTab === "videos" ? "active" : ""}
+              onClick={() => setActiveTab("videos")}
+            >
+              🎬 Vidéos ({videos.length})
+            </li>
+            <li
               className={activeTab === "packs" ? "active" : ""}
               onClick={() => setActiveTab("packs")}
             >
@@ -507,8 +599,8 @@ export default function AdminDashboard() {
         <main className="admin-main">
           <div className="admin-stats">
             <div className="stat-card" style={{ borderLeftColor: "var(--primary)" }}>
-              <span className="stat-number">{stories.length}</span>
-              <span>📖 Histoires</span>
+              <span className="stat-number">{stories.length + videos.length}</span>
+              <span>📚 Ressources</span>
             </div>
             <div className="stat-card" style={{ borderLeftColor: "#f59e0b" }}>
               <span className="stat-number">{packs.length}</span>
@@ -747,7 +839,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Quiz intégré au formulaire principal (avec sélection visuelle) */}
+                {/* Quiz avec sélection visuelle */}
                 <div className="form-group quiz-section">
                   <label>Quiz (questions/réponses bilingues)</label>
                   <div className="quiz-builder">
@@ -792,7 +884,6 @@ export default function AdminDashboard() {
                       ))}
                     </div>
 
-                    {/* Sélection visuelle de la réponse correcte */}
                     <div className="correct-answer-selector">
                       <label>Réponse correcte :</label>
                       <div className="options-radio-group">
@@ -866,7 +957,6 @@ export default function AdminDashboard() {
                 </div>
               </form>
 
-              {/* Liste des histoires avec bouton "Gérer le quiz" */}
               <div className="stories-list">
                 {stories.map((story) => (
                   <div key={story.id} className="story-item">
@@ -896,6 +986,184 @@ export default function AdminDashboard() {
                         </button>
                       </div>
                     </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ===== ONGLET VIDÉOS ===== */}
+          {activeTab === "videos" && (
+            <section className="video-management">
+              <h2>🎬 Gestion des vidéos éducatives</h2>
+
+              <form onSubmit={handleVideoSubmit} className="admin-form video-form">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Titre (FR) *</label>
+                    <input
+                      type="text"
+                      placeholder="Titre en français"
+                      value={videoForm.titleFr}
+                      onChange={(e) => setVideoForm({ ...videoForm, titleFr: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Titre (AR) *</label>
+                    <input
+                      type="text"
+                      placeholder="العنوان بالعربية"
+                      value={videoForm.titleAr}
+                      onChange={(e) => setVideoForm({ ...videoForm, titleAr: e.target.value })}
+                      dir="rtl"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Description (FR)</label>
+                    <textarea
+                      placeholder="Description en français"
+                      value={videoForm.descriptionFr}
+                      onChange={(e) => setVideoForm({ ...videoForm, descriptionFr: e.target.value })}
+                      rows={2}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Description (AR)</label>
+                    <textarea
+                      placeholder="الوصف بالعربية"
+                      value={videoForm.descriptionAr}
+                      onChange={(e) => setVideoForm({ ...videoForm, descriptionAr: e.target.value })}
+                      rows={2}
+                      dir="rtl"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>URL YouTube</label>
+                    <input
+                      type="text"
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      value={videoForm.youtubeUrl}
+                      onChange={(e) => setVideoForm({ ...videoForm, youtubeUrl: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Catégorie</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Science, Musique..."
+                      value={videoForm.category}
+                      onChange={(e) => setVideoForm({ ...videoForm, category: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Âge recommandé</label>
+                    <select
+                      value={videoForm.age}
+                      onChange={(e) => setVideoForm({ ...videoForm, age: e.target.value })}
+                    >
+                      <option value="3-5">3-5 ans</option>
+                      <option value="6-8">6-8 ans</option>
+                      <option value="9-12">9-12 ans</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Ordre</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={videoForm.order}
+                      onChange={(e) => setVideoForm({ ...videoForm, order: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Premium</label>
+                    <input
+                      type="checkbox"
+                      checked={videoForm.isPremium}
+                      onChange={(e) => setVideoForm({ ...videoForm, isPremium: e.target.checked })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-actions">
+                  <button type="submit" className="btn-save">
+                    {editingVideoId ? "Mettre à jour la vidéo" : "Ajouter la vidéo"}
+                  </button>
+                  {editingVideoId && (
+                    <button
+                      type="button"
+                      className="btn-cancel"
+                      onClick={() => {
+                        setEditingVideoId(null);
+                        setVideoForm({
+                          titleFr: "",
+                          titleAr: "",
+                          descriptionFr: "",
+                          descriptionAr: "",
+                          youtubeUrl: "",
+                          category: "",
+                          age: "6-8",
+                          order: 0,
+                          isPremium: false,
+                        });
+                      }}
+                    >
+                      Annuler
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div className="videos-list">
+                {videos.map((video) => (
+                  <div key={video.id} className="video-item">
+                    <div className="video-header">
+                      <strong>{video.title?.fr || video.title?.ar || "Sans titre"}</strong>
+                      <span className="badge order">Ordre {video.order}</span>
+                      <span className={`badge ${video.isPremium ? "premium" : "free"}`}>
+                        {video.isPremium ? "🔒 Premium" : "🆓 Gratuit"}
+                      </span>
+                      <span className="badge age-badge">{video.age || "6-8"}</span>
+                      <div className="video-actions">
+                        <button onClick={() => loadVideoForEdit(video)}>✏️</button>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm("Supprimer cette vidéo ?")) {
+                              await deleteDoc(doc(db, "videos", video.id));
+                              toast.success("Vidéo supprimée !");
+                              fetchVideos();
+                            }
+                          }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    {video.youtubeUrl && (
+                      <div className="video-preview">
+                        <iframe
+                          width="200"
+                          height="113"
+                          src={`https://www.youtube.com/embed/${extractVideoId(video.youtubeUrl)}`}
+                          title="Aperçu vidéo"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        ></iframe>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -990,7 +1258,7 @@ export default function AdminDashboard() {
         </main>
       </div>
 
-      {/* ===== MODAL DE GESTION DU QUIZ (indépendant) ===== */}
+      {/* ===== MODAL DE GESTION DU QUIZ ===== */}
       {showQuizModal && (
         <div className="modal-overlay" onClick={() => setShowQuizModal(false)}>
           <div className="modal-content quiz-modal" onClick={(e) => e.stopPropagation()}>
@@ -1055,7 +1323,6 @@ export default function AdminDashboard() {
                 ))}
               </div>
 
-              {/* Sélection visuelle dans le modal */}
               <div className="correct-answer-selector">
                 <label>Réponse correcte :</label>
                 <div className="options-radio-group">
@@ -1091,4 +1358,11 @@ export default function AdminDashboard() {
       )}
     </div>
   );
+}
+
+// Fonction utilitaire pour extraire l'ID YouTube
+function extractVideoId(url) {
+  if (!url) return '';
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
+  return match ? match[1] : '';
 }

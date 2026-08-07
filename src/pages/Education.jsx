@@ -32,13 +32,20 @@ import Confetti from 'react-confetti';
 import toast from 'react-hot-toast';
 import "./Education.css";
 
+// Fonction utilitaire pour extraire l'ID YouTube
+function extractVideoId(url) {
+  if (!url) return '';
+  const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/);
+  return match ? match[1] : '';
+}
+
 export default function Education() {
   const navigate = useNavigate();
   const { language, setLanguage } = useLanguage();
   const { theme, setTheme, themes, darkMode, setDarkMode } = useTheme();
   const { userAccess, setUserAccess } = useUserAccess();
   const [user, setUser] = useState(auth.currentUser);
-  const [stories, setStories] = useState([]);
+  const [resources, setResources] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showThemeModal, setShowThemeModal] = useState(false);
@@ -61,9 +68,9 @@ export default function Education() {
     duration: "all",
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const storiesPerPage = 10;
+  const resourcesPerPage = 10;
 
-  // Modals
+  // Modals packs et quiz
   const [showPackModal, setShowPackModal] = useState(false);
   const [selectedPack, setSelectedPack] = useState(null);
   const [packForm, setPackForm] = useState({ name: "", phone: "" });
@@ -72,7 +79,7 @@ export default function Education() {
   const [currentQuiz, setCurrentQuiz] = useState(null);
   const [quizAnswers, setQuizAnswers] = useState([]);
   const [quizResult, setQuizResult] = useState(null);
-  const [quizFeedback, setQuizFeedback] = useState([]); // pour feedback par question
+  const [quizFeedback, setQuizFeedback] = useState([]);
   const [quizAttempted, setQuizAttempted] = useState(false);
 
   const isAdmin = user?.email === ADMIN_EMAIL;
@@ -88,13 +95,33 @@ export default function Education() {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Récupérer les histoires
         const storyQuery = query(collection(db, "stories"), orderBy("order", "asc"));
-        const snapshot = await getDocs(storyQuery);
-        const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setStories(data);
-        const cats = [...new Set(data.map((s) => s.category).filter(Boolean))];
+        const storySnapshot = await getDocs(storyQuery);
+        const storiesData = storySnapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+          type: "story",
+        }));
+
+        // Récupérer les vidéos
+        const videoQuery = query(collection(db, "videos"), orderBy("order", "asc"));
+        const videoSnapshot = await getDocs(videoQuery);
+        const videosData = videoSnapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+          type: "video",
+        }));
+
+        // Fusionner et trier par ordre
+        const allResources = [...storiesData, ...videosData].sort((a, b) => (a.order || 0) - (b.order || 0));
+        setResources(allResources);
+
+        // Extraire les catégories uniques
+        const cats = [...new Set(allResources.map((r) => r.category).filter(Boolean))];
         setCategories(cats);
 
+        // Favoris, badges, lectures
         const favs = await getFavorites();
         setFavorites(favs);
 
@@ -104,12 +131,14 @@ export default function Education() {
         const count = await getReadCount();
         setReadCount(count);
 
-        // Charger les notes
-        const ratingPromises = data.map(async (story) => {
-          const avg = await getStoryRating(story.id);
-          const userR = await getUserRatingForStory(story.id);
-          return { id: story.id, avg, userR };
-        });
+        // Charger les notes (seulement pour les histoires)
+        const ratingPromises = allResources
+          .filter(r => r.type === "story")
+          .map(async (story) => {
+            const avg = await getStoryRating(story.id);
+            const userR = await getUserRatingForStory(story.id);
+            return { id: story.id, avg, userR };
+          });
         const ratingResults = await Promise.all(ratingPromises);
         const avgRatings = {};
         const userRatingsMap = {};
@@ -128,19 +157,19 @@ export default function Education() {
     fetchData();
   }, [language]);
 
-  // Calcul des histoires accessibles
-  const freeStories = stories.filter((s) => !s.isPremium);
-  const premiumStories = stories.filter((s) => s.isPremium);
-  const maxStories = userAccess?.maxStories || 0;
-  const unlockedPremium = premiumStories.slice(0, Math.max(0, maxStories - freeStories.length));
-  const isStoryAccessible = (story) => {
-    if (!story.isPremium) return true;
-    const index = premiumStories.findIndex((s) => s.id === story.id);
+  // Calcul des ressources accessibles
+  const maxResources = userAccess?.maxStories || 0;
+  const freeResources = resources.filter((r) => !r.isPremium);
+  const premiumResources = resources.filter((r) => r.isPremium);
+  const unlockedPremium = premiumResources.slice(0, Math.max(0, maxResources - freeResources.length));
+  const isResourceAccessible = (resource) => {
+    if (!resource.isPremium) return true;
+    const index = premiumResources.findIndex((r) => r.id === resource.id);
     return index < unlockedPremium.length;
   };
 
-  const unlockedCount = stories.filter((s) => isStoryAccessible(s)).length;
-  const totalCount = stories.length;
+  const unlockedCount = resources.filter((r) => isResourceAccessible(r)).length;
+  const totalCount = resources.length;
   const progress = totalCount ? Math.round((unlockedCount / totalCount) * 100) : 0;
 
   // Confettis
@@ -152,30 +181,35 @@ export default function Education() {
   }, [unlockedCount]);
 
   // Filtrage et pagination
-  const filteredStories = stories.filter((story) => {
-    const title = getLocalizedValue(story.title, language).toLowerCase();
-    const description = getLocalizedValue(story.description, language).toLowerCase();
-    const cat = story.category?.toLowerCase() || "";
+  const filteredResources = resources.filter((resource) => {
+    const title = getLocalizedValue(resource.title, language).toLowerCase();
+    const description = getLocalizedValue(resource.description, language).toLowerCase();
+    const cat = resource.category?.toLowerCase() || "";
     const term = searchTerm.toLowerCase();
     const matchSearch = title.includes(term) || description.includes(term) || cat.includes(term);
-    const matchCategory = filters.category === "all" || story.category === filters.category;
-    const matchAge = filters.age === "all" || story.age === filters.age;
-    const matchDuration = filters.duration === "all" || story.duration === filters.duration;
+    const matchCategory = filters.category === "all" || resource.category === filters.category;
+    const matchAge = filters.age === "all" || resource.age === filters.age;
+    const matchDuration = filters.duration === "all" || resource.duration === filters.duration || !resource.duration;
     return matchSearch && matchCategory && matchAge && matchDuration;
   });
 
-  const totalPages = Math.ceil(filteredStories.length / storiesPerPage);
-  const indexOfLastStory = currentPage * storiesPerPage;
-  const indexOfFirstStory = indexOfLastStory - storiesPerPage;
-  const currentStories = filteredStories.slice(indexOfFirstStory, indexOfLastStory);
+  const totalPages = Math.ceil(filteredResources.length / resourcesPerPage);
+  const indexOfLastResource = currentPage * resourcesPerPage;
+  const indexOfFirstResource = indexOfLastResource - resourcesPerPage;
+  const currentResources = filteredResources.slice(indexOfFirstResource, indexOfLastResource);
 
   // Gestion des notes
-  const handleRate = async (storyId, rating) => {
+  const handleRate = async (resourceId, rating) => {
+    const resource = resources.find(r => r.id === resourceId);
+    if (resource?.type !== "story") {
+      toast.info(t("Cette ressource ne peut pas être notée.", "لا يمكن تقييم هذا المورد."));
+      return;
+    }
     try {
-      await rateStory(storyId, rating);
-      const avg = await getStoryRating(storyId);
-      setRatings((prev) => ({ ...prev, [storyId]: avg }));
-      setUserRatings((prev) => ({ ...prev, [storyId]: rating }));
+      await rateStory(resourceId, rating);
+      const avg = await getStoryRating(resourceId);
+      setRatings((prev) => ({ ...prev, [resourceId]: avg }));
+      setUserRatings((prev) => ({ ...prev, [resourceId]: rating }));
       toast.success(t("⭐ Note enregistrée !", "⭐ تم تسجيل التقييم!"));
     } catch (err) {
       toast.error(t("Erreur lors de la notation.", "خطأ في التقييم."));
@@ -183,18 +217,23 @@ export default function Education() {
   };
 
   // Gestion des favoris
-  const handleToggleFavorite = async (storyId) => {
+  const handleToggleFavorite = async (resourceId) => {
+    const resource = resources.find(r => r.id === resourceId);
+    if (resource?.type !== "story") {
+      toast.info(t("Seules les histoires peuvent être mises en favoris.", "يمكن إضافة القصص فقط إلى المفضلة."));
+      return;
+    }
     try {
-      await toggleFavorite(storyId);
+      await toggleFavorite(resourceId);
       const favs = await getFavorites();
       setFavorites(favs);
-      toast.success(favs.includes(storyId) ? t("❤️ Ajouté aux favoris !", "❤️ تمت الإضافة إلى المفضلة!") : t("💔 Retiré des favoris.", "💔 تمت الإزالة من المفضلة."));
+      toast.success(favs.includes(resourceId) ? t("❤️ Ajouté aux favoris !", "❤️ تمت الإضافة إلى المفضلة!") : t("💔 Retiré des favoris.", "💔 تمت الإزالة من المفضلة."));
     } catch (err) {
       toast.error(t("Erreur.", "خطأ."));
     }
   };
 
-  // Lecture audio (corrigée pour l'arabe)
+  // Lecture audio
   const getVoiceForLanguage = (lang) => {
     if (!window.speechSynthesis) return null;
     const voices = window.speechSynthesis.getVoices();
@@ -207,6 +246,10 @@ export default function Education() {
   };
 
   const handleSpeak = (content, lang = "fr-FR") => {
+    if (!content) {
+      toast.info(t("Aucun contenu à lire.", "لا يوجد محتوى للقراءة."));
+      return;
+    }
     if (!window.speechSynthesis) {
       toast.error(t("Votre navigateur ne supporte pas la synthèse vocale.", "متصفحك لا يدعم تحويل النص إلى كلام."));
       return;
@@ -233,9 +276,14 @@ export default function Education() {
   };
 
   // Marquer comme lu
-  const handleReadStory = async (storyId) => {
+  const handleReadStory = async (resourceId) => {
+    const resource = resources.find(r => r.id === resourceId);
+    if (resource?.type !== "story") {
+      toast.info(t("Seules les histoires peuvent être marquées comme lues.", "يمكن وضع علامة مقروءة على القصص فقط."));
+      return;
+    }
     try {
-      await incrementReadCount(storyId);
+      await incrementReadCount(resourceId);
       const newCount = await getReadCount();
       setReadCount(newCount);
       if (newCount >= 3) await awardBadge("reader-beginner");
@@ -249,55 +297,22 @@ export default function Education() {
     }
   };
 
-  // Gestion des packs
-  const handlePackSelection = (pack) => {
-    setSelectedPack(pack);
-    setPackForm({ name: "", phone: "" });
-    setPackRequestStatus(null);
-  };
-
-  const submitPackRequest = async () => {
-    if (!packForm.name || !packForm.phone) {
-      toast.error(t("Veuillez remplir tous les champs.", "يرجى ملء جميع الحقول."));
+  // Quiz
+  const openQuiz = (resource) => {
+    if (resource.type !== "story") {
+      toast.info(t("Pas de quiz pour cette ressource.", "لا يوجد اختبار لهذا المورد."));
       return;
     }
-    try {
-      await addDoc(collection(db, "packRequests"), {
-        uid: user.uid,
-        email: user.email,
-        name: packForm.name,
-        phone: packForm.phone,
-        maxStories: selectedPack.maxStories,
-        price: selectedPack.price,
-        status: "pending",
-        createdAt: serverTimestamp(),
-      });
-      toast.success(t("✅ Demande envoyée ! L'admin validera sous peu.", "✅ تم إرسال الطلب! سيقوم المسؤول بالتحقق قريباً."));
-      setPackRequestStatus("success");
-      setTimeout(() => {
-        setShowPackModal(false);
-        setSelectedPack(null);
-        setPackRequestStatus(null);
-      }, 2000);
-    } catch (err) {
-      console.error(err);
-      toast.error(t("❌ Erreur lors de l'envoi.", "❌ خطأ في الإرسال."));
-      setPackRequestStatus("error");
-    }
-  };
-
-  // Quiz amélioré
-  const openQuiz = (story) => {
-    if (!story.quiz || story.quiz.length === 0) {
+    if (!resource.quiz || resource.quiz.length === 0) {
       toast(t("Pas de quiz pour cette histoire.", "لا يوجد اختبار لهذه القصة."));
       return;
     }
-    const questions = story.quiz.map((q) => ({
+    const questions = resource.quiz.map((q) => ({
       question: language === "fr" ? q.questionFr : q.questionAr,
       options: language === "fr" ? q.optionsFr : q.optionsAr,
       correctAnswerIndex: q.correctAnswerIndex,
     }));
-    setCurrentQuiz({ storyId: story.id, questions });
+    setCurrentQuiz({ storyId: resource.id, questions });
     setQuizAnswers(new Array(questions.length).fill(null));
     setQuizFeedback(new Array(questions.length).fill(null));
     setQuizResult(null);
@@ -309,7 +324,6 @@ export default function Education() {
     const newAnswers = [...quizAnswers];
     newAnswers[qIndex] = optionIndex;
     setQuizAnswers(newAnswers);
-    // Feedback individuel
     const feedback = quizFeedback.map((f, i) => {
       if (i === qIndex) {
         const correct = optionIndex === currentQuiz.questions[i].correctAnswerIndex;
@@ -351,9 +365,162 @@ export default function Education() {
     setQuizAttempted(false);
   };
 
+  // Gestion des packs
+  const handlePackSelection = (pack) => {
+    setSelectedPack(pack);
+    setPackForm({ name: "", phone: "" });
+    setPackRequestStatus(null);
+  };
+
+  const submitPackRequest = async () => {
+    if (!packForm.name || !packForm.phone) {
+      toast.error(t("Veuillez remplir tous les champs.", "يرجى ملء جميع الحقول."));
+      return;
+    }
+    try {
+      await addDoc(collection(db, "packRequests"), {
+        uid: user.uid,
+        email: user.email,
+        name: packForm.name,
+        phone: packForm.phone,
+        maxStories: selectedPack.maxStories,
+        price: selectedPack.price,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      toast.success(t("✅ Demande envoyée ! L'admin validera sous peu.", "✅ تم إرسال الطلب! سيقوم المسؤول بالتحقق قريباً."));
+      setPackRequestStatus("success");
+      setTimeout(() => {
+        setShowPackModal(false);
+        setSelectedPack(null);
+        setPackRequestStatus(null);
+      }, 2000);
+    } catch (err) {
+      console.error(err);
+      toast.error(t("❌ Erreur lors de l'envoi.", "❌ خطأ في الإرسال."));
+      setPackRequestStatus("error");
+    }
+  };
+
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/");
+  };
+
+  // Rendu d'une ressource
+  const renderResourceCard = (resource, index) => {
+    const accessible = isResourceAccessible(resource);
+    const title = getLocalizedValue(resource.title, language);
+    const description = getLocalizedValue(resource.description, language);
+    const isFav = favorites.includes(resource.id);
+    const avgRating = ratings[resource.id] || 0;
+    const userRating = userRatings[resource.id] || 0;
+
+    return (
+      <div key={resource.id} className={`resource-card ${!accessible ? "locked" : ""}`} style={{ animationDelay: `${index * 0.08}s` }}>
+        {resource.type === "video" && resource.youtubeUrl && (
+          <div className="video-player">
+            <iframe
+              src={`https://www.youtube.com/embed/${extractVideoId(resource.youtubeUrl)}`}
+              title={title}
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            ></iframe>
+          </div>
+        )}
+        {resource.type === "story" && resource.imageUrl && (
+          <img src={resource.imageUrl} alt={title} className="resource-image" loading="lazy" />
+        )}
+
+        <div className="resource-content">
+          <h3>
+            {title}
+            <span className="resource-category">#{resource.category}</span>
+            {resource.isPremium && (
+              <span className="premium-badge">{accessible ? "🔓" : "🔒"}</span>
+            )}
+            <span className="resource-type-badge">
+              {resource.type === "video" ? "🎬 Vidéo" : "📖 Histoire"}
+            </span>
+          </h3>
+          {description && <p>{description}</p>}
+
+          {/* Actions communes */}
+          <div className="resource-actions-bar">
+            {resource.type === "story" && (
+              <>
+                <div className="rating-stars">
+                  {[1, 2, 3, 4, 5].map((r) => (
+                    <span
+                      key={r}
+                      onClick={() => accessible && handleRate(resource.id, r)}
+                      style={{ cursor: accessible ? "pointer" : "default", opacity: accessible ? 1 : 0.5 }}
+                    >
+                      {r <= (userRating || avgRating) ? "⭐" : "☆"}
+                    </span>
+                  ))}
+                </div>
+                <button
+                  onClick={() => accessible && handleToggleFavorite(resource.id)}
+                  disabled={!accessible}
+                  className={!accessible ? "disabled" : ""}
+                >
+                  {isFav ? "❤️" : "🤍"}
+                </button>
+                {accessible && (
+                  <button onClick={() => handleSpeak(resource.content?.[language] || "", language === "fr" ? "fr-FR" : "ar-SA")}>
+                    {speaking === resource.content?.[language] ? "🔊" : "🔈"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+
+          {accessible ? (
+            <>
+              {resource.type === "story" && resource.content && (
+                <details>
+                  <summary>{t("Lire l'histoire", "اقرأ القصة")}</summary>
+                  <div className="story-text">{getLocalizedValue(resource.content, language)}</div>
+                  {resource.images && resource.images.length > 0 && (
+                    <div className="story-gallery">
+                      {resource.images.map((url, idx) => (
+                        <img key={idx} src={url} alt={`illustration ${idx}`} loading="lazy" />
+                      ))}
+                    </div>
+                  )}
+                </details>
+              )}
+              {resource.type === "video" && (
+                <div className="video-description">
+                  {getLocalizedValue(resource.description, language)}
+                </div>
+              )}
+              {resource.type === "story" && (
+                <>
+                  <button onClick={() => handleReadStory(resource.id)} className="btn-read">
+                    📖 {t("Marquer comme lue", "وضع علامة مقروءة")}
+                  </button>
+                  {resource.quiz && resource.quiz.length > 0 && (
+                    <button onClick={() => openQuiz(resource)} className="btn-quiz pulse">
+                      📝 {t("Quiz", "اختبار")}
+                    </button>
+                  )}
+                </>
+              )}
+            </>
+          ) : (
+            <div className="lock-overlay">
+              <p>🔒 {t("Cette ressource est verrouillée", "هذا المورد مقفل")}</p>
+              <button onClick={() => setShowPackModal(true)} className="btn-upgrade glow">
+                {t("Débloquer avec un pack", "افتح بحزمة")}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -459,102 +626,14 @@ export default function Education() {
 
         {loading ? (
           <div className="loader"><span></span><span></span><span></span></div>
-        ) : filteredStories.length === 0 ? (
-          <p>{t("Aucune histoire disponible.", "لا توجد قصص متاحة.")}</p>
+        ) : filteredResources.length === 0 ? (
+          <p>{t("Aucune ressource disponible.", "لا توجد موارد متاحة.")}</p>
         ) : (
           <>
             <div className="stories-grid">
-              {currentStories.map((story, index) => {
-                const accessible = isStoryAccessible(story);
-                const title = getLocalizedValue(story.title, language);
-                const description = getLocalizedValue(story.description, language);
-                const content = getLocalizedValue(story.content, language);
-                const isFav = favorites.includes(story.id);
-                const avgRating = ratings[story.id] || 0;
-                const userRating = userRatings[story.id] || 0;
-
-                return (
-                  <div key={story.id} className={`story-card ${!accessible ? "locked" : ""}`} style={{ animationDelay: `${index * 0.08}s` }}>
-                    {story.imageUrl && (
-                      <img src={story.imageUrl} alt={title} className="story-card-image" loading="lazy" />
-                    )}
-                    <div className="story-card-content">
-                      <h3>
-                        {title}
-                        <span className="story-category">#{story.category}</span>
-                        {story.isPremium && (
-                          <span className="premium-badge">{accessible ? "🔓" : "🔒"}</span>
-                        )}
-                      </h3>
-                      {description && <p>{description}</p>}
-
-                      {/* Barre d'actions : étoiles, favori, audio */}
-                      <div className="story-actions-bar">
-                        <div className="rating-stars">
-                          {[1, 2, 3, 4, 5].map((r) => (
-                            <span
-                              key={r}
-                              onClick={() => accessible && handleRate(story.id, r)}
-                              style={{ cursor: accessible ? "pointer" : "default", opacity: accessible ? 1 : 0.5 }}
-                            >
-                              {r <= (userRating || avgRating) ? "⭐" : "☆"}
-                            </span>
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => accessible && handleToggleFavorite(story.id)}
-                          disabled={!accessible}
-                          className={!accessible ? "disabled" : ""}
-                        >
-                          {isFav ? "❤️" : "🤍"}
-                        </button>
-                        {accessible && (
-                          <button onClick={() => handleSpeak(content, language === "fr" ? "fr-FR" : "ar-SA")}>
-                            {speaking === content ? "🔊" : "🔈"}
-                          </button>
-                        )}
-                      </div>
-
-                      {accessible ? (
-                        <>
-                          <details>
-                            <summary>{t("Lire l'histoire", "اقرأ القصة")}</summary>
-                            <div className="story-text">{content}</div>
-                            {story.images && story.images.length > 0 && (
-                              <div className="story-gallery">
-                                {story.images.map((url, idx) => (
-                                  <img key={idx} src={url} alt={`illustration ${idx}`} loading="lazy" />
-                                ))}
-                              </div>
-                            )}
-                          </details>
-                          <button
-                            onClick={() => handleReadStory(story.id)}
-                            className="btn-read"
-                          >
-                            📖 {t("Marquer comme lue", "وضع علامة مقروءة")}
-                          </button>
-                          {story.quiz && story.quiz.length > 0 && (
-                            <button onClick={() => openQuiz(story)} className="btn-quiz pulse">
-                              📝 {t("Quiz", "اختبار")}
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <div className="lock-overlay">
-                          <p>🔒 {t("Cette histoire est verrouillée", "هذه القصة مقفلة")}</p>
-                          <button onClick={() => setShowPackModal(true)} className="btn-upgrade glow">
-                            {t("Débloquer avec un pack", "افتح بحزمة")}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {currentResources.map((resource, index) => renderResourceCard(resource, index))}
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="pagination">
                 <button onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1}>
