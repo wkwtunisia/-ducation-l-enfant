@@ -37,24 +37,29 @@ function App() {
   const [userAccess, setUserAccess] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Appliquer le thème (couleurs)
+  // Appliquer le thème et le mode sombre
   useEffect(() => {
     const colors = themes[theme];
-    Object.keys(colors).forEach((key) => {
-      document.documentElement.style.setProperty(`--${key}`, colors[key]);
-    });
-  }, [theme]);
-
-  // Appliquer le mode sombre sur le body
-  useEffect(() => {
     if (darkMode) {
-      document.body.classList.add("dark-mode");
+      document.documentElement.style.setProperty("--primary", colors.primary);
+      document.documentElement.style.setProperty("--secondary", colors.secondary);
+      document.documentElement.style.setProperty("--accent", colors.accent);
+      document.documentElement.style.setProperty("--bg", "#1a1a2e");
+      document.documentElement.style.setProperty("--text", "#f0f0f0");
+      document.documentElement.style.setProperty("--card-bg", "#2d2d44");
+      document.documentElement.style.setProperty("--border", "#444");
     } else {
-      document.body.classList.remove("dark-mode");
+      document.documentElement.style.setProperty("--primary", colors.primary);
+      document.documentElement.style.setProperty("--secondary", colors.secondary);
+      document.documentElement.style.setProperty("--accent", colors.accent);
+      document.documentElement.style.setProperty("--bg", colors.bg);
+      document.documentElement.style.setProperty("--text", "#1a1a2e");
+      document.documentElement.style.setProperty("--card-bg", "#ffffff");
+      document.documentElement.style.setProperty("--border", "#e2e8f0");
     }
-  }, [darkMode]);
+  }, [theme, darkMode]);
 
-  // Étoiles de fond (uniquement si pas en dark mode)
+  // Étoiles de fond (uniquement en mode clair, ou adapté)
   useEffect(() => {
     const container = document.createElement('div');
     container.style.position = 'fixed';
@@ -118,7 +123,8 @@ function App() {
       <LanguageContext.Provider value={{ language, setLanguage }}>
         <UserAccessContext.Provider value={{ userAccess, setUserAccess }}>
           <BrowserRouter>
-            <div className="app-container" style={{ backgroundColor: darkMode ? '#1a1a2e' : 'var(--bg)' }}>
+            <div className="app-container" style={{ backgroundColor: 'var(--bg)', color: 'var(--text)' }}>
+              <Toaster position="top-right" />
               <Routes>
                 <Route path="/" element={<Login />} />
                 <Route
@@ -139,7 +145,6 @@ function App() {
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-              <Toaster position="top-right" />
             </div>
           </BrowserRouter>
         </UserAccessContext.Provider>

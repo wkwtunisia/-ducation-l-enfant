@@ -530,3 +530,29 @@
     padding: 6px 12px;
   }
 }
+
+/* Dans AdminDashboard.css */
+.dark-mode .admin-container {
+  background-color: #1a1a2e;
+  color: #f0f0f0;
+}
+.dark-mode .admin-header,
+.dark-mode .stat-card,
+.dark-mode .admin-form,
+.dark-mode .request-item,
+.dark-mode .story-item,
+.dark-mode .pack-item,
+.dark-mode .user-item {
+  background-color: #2d2d44 !important;
+  color: #f0f0f0 !important;
+  border-color: #444 !important;
+}
+.dark-mode .admin-sidebar {
+  background: #2d2d44;
+}
+.dark-mode .admin-sidebar li:hover {
+  background: #444;
+}
+.dark-mode .admin-sidebar li.active {
+  background: var(--primary);
+}

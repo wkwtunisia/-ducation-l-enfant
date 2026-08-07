@@ -44,11 +44,6 @@ export default function Education() {
   const [showThemeModal, setShowThemeModal] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
 
-  // Recherche et pagination
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const storiesPerPage = 10;
-
   // Nouvelles fonctionnalités
   const [ratings, setRatings] = useState({});
   const [userRatings, setUserRatings] = useState({});
@@ -58,12 +53,15 @@ export default function Education() {
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [speaking, setSpeaking] = useState(null);
 
-  // Filtres avancés
+  // Filtres, recherche, pagination
+  const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     category: "all",
     age: "all",
     duration: "all",
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const storiesPerPage = 10;
 
   // Modals
   const [showPackModal, setShowPackModal] = useState(false);
@@ -118,7 +116,7 @@ export default function Education() {
         setUserRatings(userRatingsMap);
       } catch (err) {
         console.error("Erreur chargement:", err);
-        toast.error(t("Erreur de chargement", "خطأ في التحميل"));
+        toast.error(t("Erreur de chargement des histoires", "خطأ في تحميل القصص"));
       }
       setLoading(false);
     };
@@ -150,19 +148,18 @@ export default function Education() {
 
   // Filtrage + recherche
   const filteredStories = stories.filter((story) => {
-    // Filtres catégorie, âge, durée
-    if (filters.category !== "all" && story.category !== filters.category) return false;
-    if (filters.age !== "all" && story.age !== filters.age) return false;
-    if (filters.duration !== "all" && story.duration !== filters.duration) return false;
-    // Recherche
     const title = getLocalizedValue(story.title, language).toLowerCase();
     const description = getLocalizedValue(story.description, language).toLowerCase();
     const cat = story.category?.toLowerCase() || "";
     const term = searchTerm.toLowerCase();
-    return title.includes(term) || description.includes(term) || cat.includes(term);
+    const matchSearch = title.includes(term) || description.includes(term) || cat.includes(term);
+    if (!matchSearch) return false;
+    if (filters.category !== "all" && story.category !== filters.category) return false;
+    if (filters.age !== "all" && story.age !== filters.age) return false;
+    if (filters.duration !== "all" && story.duration !== filters.duration) return false;
+    return true;
   });
 
-  // Pagination
   const indexOfLastStory = currentPage * storiesPerPage;
   const indexOfFirstStory = indexOfLastStory - storiesPerPage;
   const currentStories = filteredStories.slice(indexOfFirstStory, indexOfLastStory);
@@ -184,7 +181,7 @@ export default function Education() {
       setUserRatings((prev) => ({ ...prev, [storyId]: rating }));
       toast.success(t("⭐ Note enregistrée !", "⭐ تم تسجيل التقييم!"));
     } catch (err) {
-      toast.error(t("Erreur", "خطأ"));
+      toast.error(t("Erreur lors de l'enregistrement", "خطأ في التسجيل"));
     }
   };
 
@@ -194,7 +191,7 @@ export default function Education() {
       await toggleFavorite(storyId);
       const favs = await getFavorites();
       setFavorites(favs);
-      toast.success(favs.includes(storyId) ? t("❤️ Ajouté aux favoris !", "❤️ تمت الإضافة إلى المفضلة!") : t("💔 Retiré des favoris", "💔 تم الإزالة من المفضلة"));
+      toast.success(favs.includes(storyId) ? t("❤️ Ajouté aux favoris !", "❤️ تمت الإضافة إلى المفضلة!") : t("💔 Retiré des favoris", "💔 تمت الإزالة من المفضلة"));
     } catch (err) {
       toast.error(t("Erreur", "خطأ"));
     }
@@ -231,7 +228,7 @@ export default function Education() {
       if (newCount >= 25) await awardBadge("explorer");
       const userBadges = await getUserBadges();
       setBadges(userBadges);
-      toast.success(t("✅ Historie marquée comme lue !", "✅ تم وضع علامة مقروءة!"));
+      toast.success(t("📖 Histoire marquée comme lue !", "📖 تم وضع علامة مقروءة!"));
     } catch (err) {
       toast.error(t("Erreur", "خطأ"));
     }
@@ -277,7 +274,7 @@ export default function Education() {
   // Quiz
   const openQuiz = (story) => {
     if (!story.quiz || story.quiz.length === 0) {
-      toast(t("Pas de quiz pour cette histoire.", "لا يوجد اختبار لهذه القصة."));
+      toast.error(t("Pas de quiz pour cette histoire.", "لا يوجد اختبار لهذه القصة."));
       return;
     }
     const questions = story.quiz.map((q) => ({
@@ -312,7 +309,9 @@ export default function Education() {
       await awardBadge("quiz-master");
       const userBadges = await getUserBadges();
       setBadges(userBadges);
-      toast.success(t("🏆 Quiz réussi à 100% ! Nouveau badge débloqué !", "🏆 اجتياز الاختبار بنسبة 100%! تم فتح شارة جديدة!"));
+      toast.success(t("🏆 Quiz parfait ! Nouveau badge débloqué !", "🏆 اختبار مثالي! تم فتح شارة جديدة!"));
+    } else {
+      toast.success(t(`✅ Quiz terminé : ${correctCount}/${total}`, `✅ انتهى الاختبار: ${correctCount}/${total}`));
     }
   };
 
@@ -379,10 +378,7 @@ export default function Education() {
               type="text"
               placeholder={t("Rechercher une histoire...", "ابحث عن قصة...")}
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
           <div className="filters">
@@ -537,8 +533,187 @@ export default function Education() {
         )}
       </section>
 
-      {/* Modals (inchangés) */}
-      {/* ... (gardez les modals de thème, packs, badges, quiz inchangés) */}
+      {/* Modals (thème, badges, packs, quiz) */}
+      {/* Modal thème */}
+      {showThemeModal && (
+        <div className="modal-overlay" onClick={() => setShowThemeModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>{t("Choisissez votre thème", "اختر ثيمك")}</h2>
+            <div className="theme-grid">
+              {Object.keys(themes).map((key) => (
+                <div
+                  key={key}
+                  className={`theme-option ${theme === key ? "active" : ""}`}
+                  style={{ backgroundColor: themes[key].primary }}
+                  onClick={() => {
+                    setTheme(key);
+                    setShowThemeModal(false);
+                  }}
+                >
+                  <span>{key}</span>
+                </div>
+              ))}
+            </div>
+            <button className="btn-close-modal" onClick={() => setShowThemeModal(false)}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal badges */}
+      {showBadgesModal && (
+        <div className="modal-overlay" onClick={() => setShowBadgesModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>🏅 {t("Mes badges", "شاراتي")}</h2>
+            {badges.length === 0 ? (
+              <p>{t("Pas encore de badges. Continuez à lire et à faire des quiz !", "لا توجد شارات بعد. استمر في القراءة وحل الاختبارات!")}</p>
+            ) : (
+              <div className="badges-grid">
+                {badges.map((badge) => {
+                  const badgeInfo = {
+                    "reader-beginner": { label: "📖 Lecteur débutant", desc: "3 histoires lues" },
+                    "bookworm": { label: "🐛 Ver de livre", desc: "10 histoires lues" },
+                    "explorer": { label: "🧭 Explorateur", desc: "25 histoires lues" },
+                    "quiz-master": { label: "🏆 Maître des quiz", desc: "Quiz à 100% réussi" },
+                  };
+                  const info = badgeInfo[badge] || { label: badge, desc: "" };
+                  return (
+                    <div key={badge} className="badge-item-card">
+                      <span className="badge-icon">{info.label.split(" ")[0]}</span>
+                      <div>
+                        <strong>{info.label}</strong>
+                        <p>{info.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button className="btn-close-modal" onClick={() => setShowBadgesModal(false)}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal packs */}
+      {showPackModal && (
+        <div className="modal-overlay" onClick={() => {
+          if (!selectedPack) setShowPackModal(false);
+          else if (window.confirm(t("Annuler la demande en cours ?", "إلغاء الطلب الحالي؟"))) {
+            setSelectedPack(null);
+            setShowPackModal(false);
+            setPackRequestStatus(null);
+          }
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>{t("Choisissez votre pack", "اختر حزمتك")}</h2>
+            {!selectedPack ? (
+              <div className="packs-grid">
+                {packsOffers.map((pack, idx) => (
+                  <div key={idx} className="pack-card">
+                    <h3>{pack.label}</h3>
+                    <p className="pack-price">{pack.price} Dinar</p>
+                    <button onClick={() => handlePackSelection(pack)} className="btn-select-pack">
+                      {t("Sélectionner", "اختر")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="pack-form">
+                <h3>{selectedPack.label}</h3>
+                <p>{t("Prix :", "السعر:")} {selectedPack.price} Dinar</p>
+                <form onSubmit={(e) => { e.preventDefault(); submitPackRequest(); }}>
+                  <div className="form-group">
+                    <label>{t("Nom complet", "الاسم الكامل")}</label>
+                    <input
+                      type="text"
+                      required
+                      value={packForm.name}
+                      onChange={(e) => setPackForm({ ...packForm, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{t("Numéro de téléphone", "رقم الهاتف")}</label>
+                    <input
+                      type="tel"
+                      required
+                      value={packForm.phone}
+                      onChange={(e) => setPackForm({ ...packForm, phone: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>{t("Email (automatique)", "البريد الإلكتروني (تلقائي)")}</label>
+                    <input type="email" value={user?.email || ""} disabled />
+                  </div>
+                  <div className="pack-form-actions">
+                    <button type="submit" className="btn-submit-request">
+                      {t("Envoyer la demande", "إرسال الطلب")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-cancel"
+                      onClick={() => {
+                        setSelectedPack(null);
+                        setPackRequestStatus(null);
+                      }}
+                    >
+                      {t("Retour", "رجوع")}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+            <button className="btn-close-modal" onClick={() => {
+              setShowPackModal(false);
+              setSelectedPack(null);
+              setPackRequestStatus(null);
+            }}>✕</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal quiz */}
+      {showQuizModal && currentQuiz && (
+        <div className="modal-overlay" onClick={() => setShowQuizModal(false)}>
+          <div className="modal-content quiz-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>📝 {t("Quiz", "اختبار")}</h2>
+            {quizResult ? (
+              <div className="quiz-result">
+                <p>{t("Votre score :", "نتيجتك:")} {quizResult.correct}/{quizResult.total}</p>
+                <p>{quizResult.percentage}%</p>
+                <button onClick={() => setShowQuizModal(false)} className="btn-close-quiz">
+                  {t("Fermer", "إغلاق")}
+                </button>
+              </div>
+            ) : (
+              <>
+                {currentQuiz.questions.map((q, qIdx) => (
+                  <div key={qIdx} className="quiz-question">
+                    <p><strong>{qIdx + 1}. {q.question}</strong></p>
+                    <div className="quiz-options">
+                      {q.options.map((opt, oIdx) => (
+                        <label key={oIdx}>
+                          <input
+                            type="radio"
+                            name={`q${qIdx}`}
+                            value={oIdx}
+                            checked={quizAnswers[qIdx] === oIdx}
+                            onChange={() => handleAnswerChange(qIdx, oIdx)}
+                          />
+                          {opt}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <button onClick={submitQuiz} className="btn-submit-quiz">
+                  {t("Soumettre", "إرسال")}
+                </button>
+              </>
+            )}
+            <button className="btn-close-modal" onClick={() => setShowQuizModal(false)}>✕</button>
+          </div>
+        </div>
+      )}
 
       <footer className="education-footer">
         <p>

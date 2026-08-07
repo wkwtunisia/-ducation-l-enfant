@@ -910,3 +910,170 @@
     align-items: stretch;
   }
 }
+/* src/pages/Education.css (ajouts) */
+
+/* Dark mode */
+.dark-mode {
+  background-color: #1a1a2e;
+  color: #f0f0f0;
+}
+.dark-mode .education-header,
+.dark-mode .story-card,
+.dark-mode .welcome-banner,
+.dark-mode .modal-content,
+.dark-mode .admin-form,
+.dark-mode .stat-card,
+.dark-mode .request-item,
+.dark-mode .story-item,
+.dark-mode .pack-item,
+.dark-mode .user-item {
+  background-color: #2d2d44 !important;
+  color: #f0f0f0 !important;
+  border-color: #444 !important;
+}
+.dark-mode .btn-lang,
+.dark-mode .btn-theme,
+.dark-mode .btn-admin,
+.dark-mode .btn-badges,
+.dark-mode .btn-darkmode {
+  background-color: #444 !important;
+  color: white !important;
+}
+.dark-mode .user-email,
+.dark-mode .user-stats {
+  background-color: #444 !important;
+  color: white !important;
+}
+.dark-mode .filter-group {
+  background-color: #2d2d44 !important;
+  border-color: #555 !important;
+}
+.dark-mode .filter-group label {
+  color: #ccc !important;
+}
+.dark-mode .filter-group select {
+  background-color: #3a3a5a !important;
+  color: #f0f0f0 !important;
+}
+.dark-mode .search-bar input {
+  background: #3a3a5a !important;
+  color: #f0f0f0 !important;
+  border-color: #555 !important;
+}
+.dark-mode .story-text {
+  background: #3a3a5a !important;
+}
+.dark-mode .lock-overlay {
+  background: rgba(0,0,0,0.6) !important;
+}
+.dark-mode .loader span {
+  background: #f0f0f0 !important;
+}
+
+/* Barre de recherche */
+.search-bar {
+  flex: 1;
+  min-width: 200px;
+}
+.search-bar input {
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 30px;
+  border: 2px solid var(--primary);
+  background: white;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+.search-bar input:focus {
+  border-color: var(--secondary);
+  outline: none;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 30px;
+}
+.pagination button {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 30px;
+  background: var(--primary);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.pagination button:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pagination span {
+  font-weight: 600;
+  color: var(--primary);
+}
+.dark-mode .pagination span {
+  color: var(--secondary);
+}
+
+/* Bouton dark mode */
+.btn-darkmode {
+  background: var(--accent);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 25px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.btn-darkmode:hover {
+  transform: scale(1.05);
+}
+
+/* Amélioration des filtres */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: white;
+  padding: 4px 12px 4px 16px;
+  border-radius: 30px;
+  border: 2px solid var(--primary);
+}
+.filter-group label {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--primary);
+}
+.filter-group select {
+  border: none;
+  padding: 6px 4px;
+  background: transparent;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.dark-mode .filter-group {
+  background: #2d2d44;
+  border-color: #555;
+}
+.dark-mode .filter-group label {
+  color: #ccc;
+}
+.dark-mode .filter-group select {
+  background: #3a3a5a;
+  color: #f0f0f0;
+}
