@@ -3,12 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { createContext, useState, useContext, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { auth, db, createUserDocument } from "./firebase";
 import Login from "./pages/Login";
 import Education from "./pages/Education";
 import AdminDashboard from "./pages/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/AdminRoute";
+import { Toaster } from "react-hot-toast";
 import "./App.css";
 
 // Contextes
@@ -21,7 +22,6 @@ export const useUserAccess = () => useContext(UserAccessContext);
 export const ThemeContext = createContext();
 export const useTheme = () => useContext(ThemeContext);
 
-// Thèmes disponibles
 const themes = {
   blue: { primary: "#4f46e5", secondary: "#818cf8", accent: "#e0e7ff", bg: "#f5f7fa" },
   pink: { primary: "#ec4899", secondary: "#f472b6", accent: "#fce7f3", bg: "#fdf2f8" },
@@ -33,10 +33,11 @@ const themes = {
 function App() {
   const [language, setLanguage] = useState("fr");
   const [theme, setTheme] = useState("blue");
+  const [darkMode, setDarkMode] = useState(false);
   const [userAccess, setUserAccess] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Appliquer le thème
+  // Appliquer le thème (couleurs)
   useEffect(() => {
     const colors = themes[theme];
     Object.keys(colors).forEach((key) => {
@@ -44,7 +45,16 @@ function App() {
     });
   }, [theme]);
 
-  // Étoiles de fond (effet enfantin)
+  // Appliquer le mode sombre sur le body
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add("dark-mode");
+    } else {
+      document.body.classList.remove("dark-mode");
+    }
+  }, [darkMode]);
+
+  // Étoiles de fond (uniquement si pas en dark mode)
   useEffect(() => {
     const container = document.createElement('div');
     container.style.position = 'fixed';
@@ -68,10 +78,11 @@ function App() {
     return () => document.body.removeChild(container);
   }, []);
 
-  // Chargement de l'accès utilisateur
+  // Chargement de l'utilisateur
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        await createUserDocument(user);
         const userDocRef = doc(db, "userAccess", user.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
@@ -103,11 +114,11 @@ function App() {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, themes }}>
+    <ThemeContext.Provider value={{ theme, setTheme, themes, darkMode, setDarkMode }}>
       <LanguageContext.Provider value={{ language, setLanguage }}>
         <UserAccessContext.Provider value={{ userAccess, setUserAccess }}>
           <BrowserRouter>
-            <div className="app-container" style={{ backgroundColor: 'var(--bg)' }}>
+            <div className="app-container" style={{ backgroundColor: darkMode ? '#1a1a2e' : 'var(--bg)' }}>
               <Routes>
                 <Route path="/" element={<Login />} />
                 <Route
@@ -128,6 +139,7 @@ function App() {
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              <Toaster position="top-right" />
             </div>
           </BrowserRouter>
         </UserAccessContext.Provider>

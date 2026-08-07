@@ -1,4 +1,3 @@
-/* src/pages/AdminDashboard.css */
 .admin-container {
   max-width: 1400px;
   margin: 0 auto;
@@ -8,7 +7,7 @@
   font-family: 'Segoe UI', 'Comic Sans MS', 'Chalkboard SE', sans-serif;
 }
 
-/* ----- HEADER ----- */
+/* HEADER */
 .admin-header {
   display: flex;
   justify-content: space-between;
@@ -55,14 +54,14 @@
   transform: scale(1.05);
 }
 
-/* ----- CONTENU PRINCIPAL ----- */
+/* CONTENU PRINCIPAL */
 .admin-content {
   display: flex;
   gap: 24px;
   flex-wrap: wrap;
 }
 
-/* ----- SIDEBAR ----- */
+/* SIDEBAR */
 .admin-sidebar {
   background: white;
   border-radius: 24px;
@@ -95,13 +94,13 @@
   color: white;
 }
 
-/* ----- MAIN ----- */
+/* MAIN */
 .admin-main {
   flex: 1;
   min-width: 280px;
 }
 
-/* ----- STATISTIQUES ----- */
+/* STATISTIQUES */
 .admin-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -132,7 +131,7 @@
   font-size: 0.9rem;
 }
 
-/* ----- FORMULAIRES ADMIN ----- */
+/* FORMULAIRES */
 .admin-form {
   display: flex;
   flex-wrap: wrap;
@@ -166,7 +165,6 @@
   margin-bottom: 4px;
   display: block;
 }
-
 .btn-save {
   background: var(--primary);
   color: white;
@@ -194,7 +192,7 @@
   transform: scale(1.05);
 }
 
-/* ----- FORMULAIRE STORIES (spécifique) ----- */
+/* FORMULAIRE STORIES */
 .story-form .form-row {
   display: flex;
   flex-wrap: wrap;
@@ -209,7 +207,6 @@
 .story-form .form-group textarea {
   width: 100%;
 }
-
 .image-gallery-input {
   display: flex;
   gap: 8px;
@@ -245,7 +242,7 @@
   cursor: pointer;
 }
 
-/* ----- QUIZ BUILDER ----- */
+/* QUIZ BUILDER */
 .quiz-section {
   width: 100%;
   margin-top: 10px;
@@ -299,7 +296,7 @@
   width: 100%;
 }
 
-/* ----- BADGES ----- */
+/* BADGES */
 .badge {
   display: inline-block;
   padding: 2px 10px;
@@ -323,8 +320,12 @@
   background: #f3e8ff;
   color: #7e22ce;
 }
+.badge.age-badge {
+  background: #fce7f3;
+  color: #be185d;
+}
 
-/* ----- LISTES ----- */
+/* LISTES */
 .requests-list,
 .stories-list,
 .packs-list,
@@ -421,7 +422,7 @@
   transform: scale(1.05);
 }
 
-/* ----- LOADER ENFANTIN ----- */
+/* LOADER */
 .loader {
   display: flex;
   justify-content: center;
@@ -452,7 +453,7 @@
   }
 }
 
-/* ----- ETATS VIDES ----- */
+/* EMPTY STATE */
 .empty-state {
   text-align: center;
   color: #64748b;
@@ -462,7 +463,7 @@
   border: 2px dashed #e2e8f0;
 }
 
-/* ----- RESPONSIVE ----- */
+/* RESPONSIVE */
 @media (max-width: 768px) {
   .admin-content {
     flex-direction: column;
@@ -511,7 +512,6 @@
     flex-direction: column;
   }
 }
-
 @media (max-width: 480px) {
   .admin-header {
     flex-direction: column;

@@ -1,4 +1,3 @@
-// src/pages/AdminDashboard.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth, db, signOut } from "../firebase";
@@ -16,6 +15,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { ADMIN_EMAIL } from "../constants";
+import { getAllUsers } from "../firebase";
 import "./AdminDashboard.css";
 
 export default function AdminDashboard() {
@@ -38,7 +38,9 @@ export default function AdminDashboard() {
     category: "",
     order: 0,
     isPremium: false,
-    quiz: [], // [{ questionFr, questionAr, optionsFr: [], optionsAr: [], correctAnswerIndex }]
+    quiz: [],
+    age: "6-8",
+    duration: "moyen",
   });
   const [editingStoryId, setEditingStoryId] = useState(null);
   const [imageInput, setImageInput] = useState("");
@@ -63,17 +65,16 @@ export default function AdminDashboard() {
   // --- Demandes ---
   const [requests, setRequests] = useState([]);
 
-  // --- UserAccess ---
+  // --- Utilisateurs ---
+  const [users, setUsers] = useState([]);
   const [usersAccess, setUsersAccess] = useState([]);
 
-  // Redirection si non admin
+  // Redirection admin
   useEffect(() => {
-    if (user?.email !== ADMIN_EMAIL) {
-      navigate("/education");
-    }
+    if (user?.email !== ADMIN_EMAIL) navigate("/education");
   }, [user, navigate]);
 
-  // --- Chargement des données ---
+  // ----- Chargement des données -----
   const fetchStories = async () => {
     try {
       const q = query(collection(db, "stories"), orderBy("order", "asc"));
@@ -81,6 +82,7 @@ export default function AdminDashboard() {
       setStories(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("Erreur stories:", err);
+      setStories([]);
     }
   };
 
@@ -90,6 +92,7 @@ export default function AdminDashboard() {
       setPacks(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("Erreur packs:", err);
+      setPacks([]);
     }
   };
 
@@ -100,6 +103,17 @@ export default function AdminDashboard() {
       setRequests(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("Erreur requests:", err);
+      setRequests([]);
+    }
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const usersData = await getAllUsers();
+      setUsers(usersData || []);
+    } catch (err) {
+      console.error("Erreur users:", err);
+      setUsers([]);
     }
   };
 
@@ -109,12 +123,19 @@ export default function AdminDashboard() {
       setUsersAccess(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     } catch (err) {
       console.error("Erreur userAccess:", err);
+      setUsersAccess([]);
     }
   };
 
   const loadAll = async () => {
     setLoading(true);
-    await Promise.all([fetchStories(), fetchPacks(), fetchRequests(), fetchUsersAccess()]);
+    await Promise.allSettled([
+      fetchStories(),
+      fetchPacks(),
+      fetchRequests(),
+      fetchUsers(),
+      fetchUsersAccess(),
+    ]);
     setLoading(false);
   };
 
@@ -122,7 +143,7 @@ export default function AdminDashboard() {
     loadAll();
   }, []);
 
-  // ---------- Gestion des histoires ----------
+  // ----- Gestion des stories (avec quiz) -----
   const addQuizQuestion = () => {
     if (
       !quizQuestion.questionFr ||
@@ -135,7 +156,7 @@ export default function AdminDashboard() {
     }
     setStoryForm((prev) => ({
       ...prev,
-      quiz: [...prev.quiz, { ...quizQuestion }],
+      quiz: [...(prev.quiz || []), { ...quizQuestion }],
     }));
     setQuizQuestion({
       questionFr: "",
@@ -149,7 +170,7 @@ export default function AdminDashboard() {
   const removeQuizQuestion = (index) => {
     setStoryForm((prev) => ({
       ...prev,
-      quiz: prev.quiz.filter((_, i) => i !== index),
+      quiz: (prev.quiz || []).filter((_, i) => i !== index),
     }));
   };
 
@@ -169,6 +190,8 @@ export default function AdminDashboard() {
       order: Number(storyForm.order) || 0,
       isPremium: storyForm.isPremium || false,
       quiz: storyForm.quiz || [],
+      age: storyForm.age || "6-8",
+      duration: storyForm.duration || "moyen",
       createdAt: serverTimestamp(),
     };
     try {
@@ -191,6 +214,8 @@ export default function AdminDashboard() {
         order: 0,
         isPremium: false,
         quiz: [],
+        age: "6-8",
+        duration: "moyen",
       });
       setImageInput("");
       fetchStories();
@@ -215,10 +240,12 @@ export default function AdminDashboard() {
       order: story.order || 0,
       isPremium: story.isPremium || false,
       quiz: story.quiz || [],
+      age: story.age || "6-8",
+      duration: story.duration || "moyen",
     });
   };
 
-  // ---------- Gestion des packs ----------
+  // ----- Gestion des packs -----
   const handlePackSubmit = async (e) => {
     e.preventDefault();
     if (!packForm.name || !packForm.price || !packForm.storyCount) return;
@@ -262,7 +289,7 @@ export default function AdminDashboard() {
     });
   };
 
-  // ---------- Gestion des demandes ----------
+  // ----- Gestion des demandes -----
   const approveRequest = async (requestId, uid, maxStories) => {
     try {
       const userAccessRef = doc(db, "userAccess", uid);
@@ -291,7 +318,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // ---------- Gestion des utilisateurs ----------
+  // ----- Gestion des utilisateurs -----
   const resetUserAccess = async (uid) => {
     if (!window.confirm("Réinitialiser l'accès de cet utilisateur à 2 histoires ?")) return;
     try {
@@ -342,19 +369,19 @@ export default function AdminDashboard() {
               className={activeTab === "stories" ? "active" : ""}
               onClick={() => setActiveTab("stories")}
             >
-              📖 Histoires
+              📖 Histoires ({stories.length})
             </li>
             <li
               className={activeTab === "packs" ? "active" : ""}
               onClick={() => setActiveTab("packs")}
             >
-              📦 Packs
+              📦 Packs ({packs.length})
             </li>
             <li
               className={activeTab === "users" ? "active" : ""}
               onClick={() => setActiveTab("users")}
             >
-              👥 Utilisateurs
+              👥 Utilisateurs ({users.length})
             </li>
           </ul>
         </aside>
@@ -420,13 +447,12 @@ export default function AdminDashboard() {
             </section>
           )}
 
-          {/* ===== ONGLET HISTOIRES ===== */}
+          {/* ===== ONGLET HISTOIRES (AVEC ÂGE ET DURÉE) ===== */}
           {activeTab === "stories" && (
             <section className="story-management">
               <h2>📖 Gestion des histoires (quiz bilingue)</h2>
 
               <form onSubmit={handleStorySubmit} className="admin-form story-form">
-                {/* Lignes 1-2 : Titres FR/AR */}
                 <div className="form-row">
                   <div className="form-group">
                     <label>Titre (FR) *</label>
@@ -449,7 +475,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Lignes 3-4 : Descriptions FR/AR */}
                 <div className="form-row">
                   <div className="form-group">
                     <label>Description (FR)</label>
@@ -472,12 +497,11 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Lignes 5-6 : Contenus FR/AR */}
                 <div className="form-row">
                   <div className="form-group">
                     <label>Contenu (FR)</label>
                     <textarea
-                      placeholder="Texte de l'histoire en français"
+                      placeholder="Contenu français"
                       value={storyForm.contentFr}
                       onChange={(e) => setStoryForm({ ...storyForm, contentFr: e.target.value })}
                       rows={5}
@@ -486,7 +510,7 @@ export default function AdminDashboard() {
                   <div className="form-group">
                     <label>Contenu (AR)</label>
                     <textarea
-                      placeholder="نص القصة بالعربية"
+                      placeholder="النص بالعربية"
                       value={storyForm.contentAr}
                       onChange={(e) => setStoryForm({ ...storyForm, contentAr: e.target.value })}
                       rows={5}
@@ -495,7 +519,6 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Lignes 7-8 : Image, catégorie, ordre, premium */}
                 <div className="form-row">
                   <div className="form-group">
                     <label>Image principale (URL)</label>
@@ -516,6 +539,7 @@ export default function AdminDashboard() {
                     />
                   </div>
                 </div>
+
                 <div className="form-row">
                   <div className="form-group">
                     <label>Ordre (numéro)</label>
@@ -536,6 +560,32 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
+                {/* ===== CHAMPS ÂGE ET DURÉE ===== */}
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Âge recommandé</label>
+                    <select
+                      value={storyForm.age}
+                      onChange={(e) => setStoryForm({ ...storyForm, age: e.target.value })}
+                    >
+                      <option value="3-5">3-5 ans</option>
+                      <option value="6-8">6-8 ans</option>
+                      <option value="9-12">9-12 ans</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Durée de lecture</label>
+                    <select
+                      value={storyForm.duration}
+                      onChange={(e) => setStoryForm({ ...storyForm, duration: e.target.value })}
+                    >
+                      <option value="court">Courte (5 min)</option>
+                      <option value="moyen">Moyenne (10 min)</option>
+                      <option value="long">Longue (15 min)</option>
+                    </select>
+                  </div>
+                </div>
+
                 {/* Images supplémentaires */}
                 <div className="form-group">
                   <label>Images supplémentaires</label>
@@ -552,7 +602,7 @@ export default function AdminDashboard() {
                         if (imageInput.trim()) {
                           setStoryForm((prev) => ({
                             ...prev,
-                            images: [...prev.images, imageInput.trim()],
+                            images: [...(prev.images || []), imageInput.trim()],
                           }));
                           setImageInput("");
                         }
@@ -562,7 +612,7 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                   <div className="image-preview-list">
-                    {storyForm.images.map((url, idx) => (
+                    {(storyForm.images || []).map((url, idx) => (
                       <div key={idx} className="image-preview-item">
                         <img src={url} alt="" width="60" />
                         <button
@@ -570,7 +620,7 @@ export default function AdminDashboard() {
                           onClick={() =>
                             setStoryForm((prev) => ({
                               ...prev,
-                              images: prev.images.filter((_, i) => i !== idx),
+                              images: (prev.images || []).filter((_, i) => i !== idx),
                             }))
                           }
                         >
@@ -581,7 +631,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Quiz bilingue */}
+                {/* Quiz */}
                 <div className="form-group quiz-section">
                   <label>Quiz (questions/réponses bilingues)</label>
                   <div className="quiz-builder">
@@ -645,7 +695,7 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                   <div className="quiz-preview">
-                    {storyForm.quiz.map((q, idx) => (
+                    {(storyForm.quiz || []).map((q, idx) => (
                       <div key={idx} className="quiz-item">
                         <span>
                           {idx + 1}. FR: {q.questionFr} / AR: {q.questionAr}
@@ -681,6 +731,8 @@ export default function AdminDashboard() {
                           order: 0,
                           isPremium: false,
                           quiz: [],
+                          age: "6-8",
+                          duration: "moyen",
                         });
                         setImageInput("");
                       }}
@@ -691,7 +743,7 @@ export default function AdminDashboard() {
                 </div>
               </form>
 
-              {/* Liste des histoires */}
+              {/* Liste des histoires avec affichage Âge et Durée */}
               <div className="stories-list">
                 {stories.map((story) => (
                   <div key={story.id} className="story-item">
@@ -701,7 +753,9 @@ export default function AdminDashboard() {
                       <span className={`badge ${story.isPremium ? "premium" : "free"}`}>
                         {story.isPremium ? "🔒 Premium" : "🆓 Gratuit"}
                       </span>
-                      <span className="badge quiz-count">Quiz: {story.quiz?.length || 0}</span>
+                      <span className="badge quiz-count">Quiz: {(story.quiz || []).length}</span>
+                      <span className="badge age-badge">{story.age || "6-8"}</span>
+                      <span className="badge duration-badge">{story.duration || "moyen"}</span>
                       <div className="story-actions">
                         <button onClick={() => loadStoryForEdit(story)}>✏️</button>
                         <button
@@ -787,18 +841,23 @@ export default function AdminDashboard() {
           {/* ===== ONGLET UTILISATEURS ===== */}
           {activeTab === "users" && (
             <section>
-              <h2>👥 Accès utilisateurs</h2>
+              <h2>👥 Gestion des utilisateurs</h2>
               <div className="users-list">
-                {usersAccess.map((u) => (
-                  <div key={u.uid} className="user-item">
-                    <span><strong>UID :</strong> {u.uid}</span>
-                    <span><strong>Stories débloquées :</strong> {u.maxStories || 2}</span>
-                    <span><strong>Pack :</strong> {u.packId || "Aucun"}</span>
-                    <button onClick={() => resetUserAccess(u.uid)} className="btn-reset">
-                      Réinitialiser (2 gratuites)
-                    </button>
-                  </div>
-                ))}
+                {users.map((u) => {
+                  const access = usersAccess.find((a) => a.id === u.uid);
+                  return (
+                    <div key={u.uid} className="user-item">
+                      <span><strong>Email :</strong> {u.email}</span>
+                      <span><strong>UID :</strong> {u.uid}</span>
+                      <span><strong>Inscrit le :</strong> {u.createdAt?.toDate?.().toLocaleDateString() || "N/A"}</span>
+                      <span><strong>Stories débloquées :</strong> {access?.maxStories || 2}</span>
+                      <span><strong>Pack :</strong> {access?.packId || "Aucun"}</span>
+                      <button onClick={() => resetUserAccess(u.uid)} className="btn-reset">
+                        Réinitialiser (2 gratuites)
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}
