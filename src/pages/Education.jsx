@@ -198,24 +198,46 @@ export default function Education() {
   };
 
   // Lecture audio
-  const handleSpeak = (content, lang = "fr-FR") => {
-    if (!window.speechSynthesis) {
-      toast.error(t("Votre navigateur ne supporte pas la synthèse vocale.", "متصفحك لا يدعم تحويل النص إلى كلام."));
-      return;
-    }
-    if (speaking === content) {
-      window.speechSynthesis.cancel();
-      setSpeaking(null);
-      return;
-    }
-    const utterance = new SpeechSynthesisUtterance(content);
-    utterance.lang = lang;
-    utterance.rate = 0.9;
-    utterance.pitch = 1.1;
-    utterance.onend = () => setSpeaking(null);
-    window.speechSynthesis.speak(utterance);
-    setSpeaking(content);
+  // src/pages/Education.jsx (extrait modifié)
+
+// Ajoutez cette fonction utilitaire (en dehors du composant)
+// Avec gestion des voix et fallback
+const handleSpeak = (content, lang = "fr-FR") => {
+  if (!window.speechSynthesis) {
+    toast.error(t("Votre navigateur ne supporte pas la synthèse vocale.", "متصفحك لا يدعم تحويل النص إلى كلام."));
+    return;
+  }
+  if (speaking === content) {
+    window.speechSynthesis.cancel();
+    setSpeaking(null);
+    return;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(content);
+  // Forcer la langue arabe si 'ar' est détecté
+  utterance.lang = lang.startsWith('ar') ? 'ar' : lang;
+  utterance.rate = 0.9;
+  utterance.pitch = 1.1;
+
+  // Chercher une voix appropriée
+  const voices = window.speechSynthesis.getVoices();
+  let voice = voices.find(v => v.lang.startsWith(utterance.lang));
+  if (!voice && lang.startsWith('ar')) {
+    voice = voices.find(v => v.lang.startsWith('ar'));
+  }
+  if (voice) {
+    utterance.voice = voice;
+  }
+
+  utterance.onend = () => setSpeaking(null);
+  utterance.onerror = (e) => {
+    console.error("Erreur de synthèse vocale :", e);
+    toast.error(t("Erreur lors de la lecture audio.", "خطأ في تشغيل الصوت."));
+    setSpeaking(null);
   };
+  window.speechSynthesis.speak(utterance);
+  setSpeaking(content);
+};
 
   // Marquer comme lue
   const handleReadStory = async (storyId) => {
